@@ -1,0 +1,1994 @@
+//! Rust crate mirroring the C API header file (`k.h`) for kdb+. The expected usage is to build a
+//!  shared library for kdb+ in Rust.
+//! 
+//! In order to avoid writing too large `unsafe` block leading to poor optimization, most of native C API functions were provided
+//!  with a wrapper funtion with a bit of ergonomic safety and with intuitive implementation as a trait method. The only 
+//!  are `knk` and `k` which are using elipsis (`...`) as its argument. These functions are provided under `native` namespace with the other C API functions.
+//! 
+//! # Note
+//! - This library is for kdb+ version >= 3.0.
+//! - Meangless C macros are excluded but accessors of an underlying array like `kC`, `kJ`, `kK` etc. are provided in Rust way.
+
+#![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
+#![allow(non_snake_case)]
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                            Load Libraries                            //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+use std::str;
+use std::ffi::CStr;
+use std::os::raw::{c_char, c_double, c_float, c_int, c_longlong, c_short, c_schar, c_uchar, c_void};
+use std::convert::TryInto;
+pub mod native;
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                          Global Variables                            //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+pub mod qtype{
+  //! This module provides a list of q types. The motivation to contain them in a module is to 
+  //!  tie them up as related items rather than scattered values. Hence user should use these
+  //!  indicators with `qtype::` prefix, e.g., `qtype::BOOL`.
+  
+  use std::os::raw::c_schar;
+  
+  /// Type indicator of q mixed list.
+  ///  Access function: `kK`
+  pub const COMPOUND:c_schar=0;
+  /// Type indicator of q bool.
+  ///  Access fucntion: `kG`
+  pub const BOOL:c_schar=1;
+  /// Type indicator of q GUID.
+  ///  Access function: `kU`
+  pub const GUID:c_schar=2;
+  /// Type indicator of q byte
+  ///  Access function: `kG`
+  pub const BYTE:c_schar=4;
+  /// Type indicator of q short.
+  ///  Access function: `kH`
+  pub const SHORT:c_schar=5;
+  /// Type indicator of q int.
+  ///  Access function: `kI`
+  pub const INT:c_schar=6;
+  /// Type indicator of q long.
+  ///  Access function: `kJ`
+  pub const LONG:c_schar=7;
+  /// Type indicator of q real.
+  ///  Access function: `kE`
+  pub const REAL:c_schar=8;
+  /// Type indicator of q float.
+  ///  Access function: `kF`
+  pub const FLOAT:c_schar=9;
+  /// Type indicator of q char.
+  ///  Access function: `kC`
+  pub const CHAR:c_schar=10;
+  /// Type indicator of q symbol.
+  ///  Access function: `kS`
+  pub const SYMBOL:c_schar=11;
+  /// Type indicator of q timestamp.
+  ///  Access function: `kJ`
+  pub const TIMESTAMP:c_schar=12;
+  /// Type indicator of q month.
+  ///  Access function: `kI`
+  pub const MONTH:c_schar=13;
+  /// Type indicator of q date.
+  ///  Access function: `kI`
+  pub const DATE:c_schar=14;
+  /// Type indicator of q datetime.
+  ///  Access function: `kF`
+  pub const DATETIME:c_schar=15;
+  /// Type indicator of q timespan.
+  ///  Access function: `kJ`
+  pub const TIMESPAN:c_schar=16;
+  /// Type indicator of q minute.
+  ///  Access function: `kI`
+  pub const MINUTE:c_schar=17;
+  /// Type indicator of q second.
+  ///  Access function: `kI`
+  pub const SECOND:c_schar=18;
+  /// Type indicator of q time.
+  ///  Access function: `kI`
+  pub const TIME:c_schar=19;
+  /// Type indicator of q table.
+  ///  `*(qstruct).k` is q dictionary.
+  pub const Table:c_schar=98;
+  /// Type indicator of q dictionary.
+  /// - `kK(x)[0]`: keys
+  /// - `kK(x)[1]`: values
+  pub const DICTIONARY:c_schar=99;
+  /// Type indicator of q sorted dictionary
+  pub const SORTED_DICTIONARY:c_schar=127;
+  /// Type indicator of q error
+  pub const ERROR:c_schar=-128;
+  /// Type indicator of q general null
+  pub const NULL:c_schar=101;
+
+}
+
+/// `K` nullptr. This value is used as general null returned value (`(::)`).
+/// # Example
+/// ```
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn vanity(_: K) -> K{
+///   println!("Initialized something, probably it is your mindset.");
+///   KNULL
+/// }
+/// ```
+pub const KNULL:K=0 as K;
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                                Macros                                //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+//%% Utility %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Convert `&str` to `S` (null-terminated character array).
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn bigbang(_: K) -> K{
+///   unsafe{native::ks(str_to_S!("super_illusion"))}
+/// }
+/// ```
+/// ```q
+/// q)bigbang: `libc_api_examples 2: (`bigbang; 1);
+/// q)bigbang[]
+/// `super_illusion
+/// ```
+/// # Note
+/// This macro cannot be created as a function due to freeing resource of Rust (not sure).
+#[macro_export]
+macro_rules! str_to_S {
+  ($string: expr) => {
+    [$string.as_bytes(), &[b'\0']].concat().as_mut_ptr() as S
+  };
+}
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                               Structs                                //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+//%% Alias %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// `char*` in C. Also used to access symbol of q.
+pub type S = *mut c_char;
+/// `const char*` in C.
+pub type const_S = *const c_char; 
+/// `char` in C. Also used to access char of q.
+pub type C = c_char;
+/// `unsigned char` in C. Also used to access byte of q.
+pub type G = c_uchar;
+/// `i16` in C. Also used to access short of q.
+pub type H = c_short;
+/// `i32` in C. Also used to access int and compatible types (month, date, minute, second and time) of q.
+pub type I = c_int;
+/// `i64` in C. Also used to access long and compatible types (timestamp and timespan) of q.
+pub type J = c_longlong;
+/// `f32` in C. Also used to access real of q.
+pub type E = c_float;
+/// `f64` in C. Also used to access float and datetime of q.
+pub type F = c_double;
+/// `void` in C.
+pub type V = c_void;
+
+//%% U %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Struct representing 16-bytes GUID.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct U{
+  pub guid: [G; 16]
+}
+
+//%% K %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Underlying list value of q object.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct k0_list_info{
+  /// Length of the list.
+  pub n: J,
+  /// Pointer referring to the head of the list. This pointer will be interpreted
+  ///  as various types when accessing `K` object to edit the list.
+  pub G0: [G; 1]
+}
+
+/// Underlying atom value of q object.
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub union k0_inner{
+  /// Byte type holder.
+  pub byte: G,
+  /// Short type holder.
+  pub short: H,
+  /// Int type holder.
+  pub int: I,
+  /// Long type older.
+  pub long: J,
+  /// Real type holder.
+  pub real: E,
+  /// Float type holder.
+  pub float: F,
+  /// Symbol type holder.
+  pub symbol: S,
+  /// Table type holder.
+  pub table: *mut k0,
+  /// List type holder.
+  pub list: k0_list_info
+}
+
+/// Underlying struct of `K` object.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct k0{
+  /// For internal usage. 
+  pub m: c_schar,
+  /// For internal usage.
+  pub a: c_schar,
+  /// Type indicator.
+  pub qtype: c_schar,
+  /// Attribute of list.
+  pub attribute: C,
+  /// Reference count of the object.
+  pub refcount: I,
+  /// Underlying value.
+  pub value: k0_inner
+}
+
+/// Struct representing q object.
+pub type K=*mut k0;
+
+//%% KList %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+pub trait KUtility{
+  /// Derefer `K` as a mutable slice of the specified type. The supported types are:
+  /// - `G`: Equivalent to C API macro `kG`.
+  /// - `H`: Equivalent to C API macro `kH`.
+  /// - `I`: Equivalent to C API macro `kI`.
+  /// - `J`: Equivalent to C API macro `kJ`.
+  /// - `E`: Equivalent to C API macro `kE`.
+  /// - `F`: Equivalent to C API macro `kF`.
+  /// - `C`: Equivalent to C API macro `kC`.
+  /// - `S`: Equivalent to C API macro `kS`.
+  /// - `K`: Equivalent to C API macro `kK`.
+  /// # Example
+  /// ```
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn modify_long_list_a_bit(long_list: K) -> K{
+  ///   if long_list.len() >= 2{
+  ///     // Derefer as a mutable i64 slice.
+  ///     long_list.as_mut_slice::<J>()[1]=30000_i64;
+  ///     // Increment the counter for reuse on q side.
+  ///     increment_reference_count(long_list)
+  ///   }
+  ///   else{
+  ///     new_error("this list is not long enough. how ironic...\0")
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)ironic: `libc_api_examples 2: (`modify_long_list_a_bit; 1);
+  /// q)list:1 2 3;
+  /// q)ironic list
+  /// 1 30000 3
+  /// q)ironic enlist 1
+  /// ```
+  /// # Note
+  /// Intuitively the parameter should be `&mut self` but it restricts a manipulating
+  ///  `K` objects in the form of slice simultaneously. As copying a pointer is not
+  ///  an expensive operation, using `self` should be fine.
+  fn as_mut_slice<'a, T>(self) -> &'a mut[T];
+
+  /// Get an underlying q byte.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_bool(atom: K) -> K{
+  ///   match atom.get_bool(){
+  ///     Ok(boolean) => {
+  ///       println!("bool: {}", boolean);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_boole: LIBPATH_ (`print_bool; 1);
+  /// q)print_bool[1b]
+  /// bool: true
+  /// ```
+  fn get_bool(&self) -> Result<bool, &'static str>;
+
+  /// Get an underlying q byte.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_guid(atom: K) -> K{
+  ///   match atom.get_guid(){
+  ///     Ok(guid) => {
+  ///       let strguid=guid.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+  ///       println!("GUID: {}-{}-{}-{}-{}", &strguid[0..4], &strguid[4..6], &strguid[6..8], &strguid[8..10], &strguid[10..16]);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_guid: LIBPATH_ (`print_guid; 1);
+  /// q)guid: first 1?0Ng;
+  /// q)print_guid[guid]
+  /// GUID: 8c6b-8b-64-68-156084
+  /// ```
+  fn get_guid(&self) -> Result<[u8; 16], &'static str>;
+
+  /// Get an underlying q byte.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_byte(atom: K) -> K{
+  ///   match atom.get_byte(){
+  ///     Ok(byte) => {
+  ///       println!("byte: {:#4x}", byte);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_byte: LIBPATH_ (`print_byte; 1);
+  /// q)print_byte[0xc4]
+  /// byte: 0xc4
+  /// ```
+  fn get_byte(&self) -> Result<u8, &'static str>;
+
+  /// Get an underlying q short.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_short(atom: K) -> K{
+  ///   match atom.get_short(){
+  ///     Ok(short) => {
+  ///       println!("short: {}", short);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_short: LIBPATH_ (`print_short; 1);
+  /// q)print_short[10h]
+  /// short: 10
+  /// ```
+  fn get_short(&self) -> Result<i16, &'static str>;
+
+  /// Get an underlying q int.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_int(atom: K) -> K{
+  ///   match atom.get_int(){
+  ///     Ok(int) => {
+  ///       println!("int: {}", int);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_int: LIBPATH_ (`print_int; 1);
+  /// q)print_int[03:57:20]
+  /// int: 14240
+  /// ```
+  fn get_int(&self) -> Result<i32, &'static str>;
+
+  /// Get an underlying q long.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_long(atom: K) -> K{
+  ///   match atom.get_long(){
+  ///     Ok(int) => {
+  ///       println!("long: {}", long);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_long: LIBPATH_ (`print_long; 1);
+  /// q)print_long[2000.01.01D12:00:00.123456789]
+  /// long: 43200123456789
+  /// ```
+  fn get_long(&self) -> Result<i64, &'static str>;
+
+  /// Get an underlying q real.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_real(atom: K) -> K{
+  ///   match atom.get_real(){
+  ///     Ok(real) => {
+  ///       println!("real: {}", real);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_real: LIBPATH_ (`print_real; 1);
+  /// q)print_real[193810.32e]
+  /// real: 193810.31
+  /// ```
+  fn get_real(&self) -> Result<f32, &'static str>;
+
+  /// Get an underlying q float.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_float(atom: K) -> K{
+  ///   match atom.get_float(){
+  ///     Ok(float) => {
+  ///       println!("float: {:.8}", float);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_float: LIBPATH_ (`print_float; 1);
+  /// q)print_float[2002.01.12T10:03:45.332]
+  /// float: 742.41927468
+  /// ```
+  fn get_float(&self) -> Result<f64, &'static str>;
+
+  /// Get an underlying q char.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_char(atom: K) -> K{
+  ///   match atom.get_char(){
+  ///     Ok(character) => {
+  ///       println!("char: \"{}\"", character);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_char: LIBPATH_ (`print_char; 1);
+  /// q)print_char["k"]
+  /// char: "k"
+  /// ```
+  fn get_char(&self) -> Result<char, &'static str>;
+
+  /// Get an underlying q symbol.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_symbol2(atom: K) -> K{
+  ///   match atom.get_symbol(){
+  ///     Ok(symbol) => {
+  ///       println!("symbol: `{}", symbol);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_symbol2: LIBPATH_ (`print_symbol2; 1);
+  /// q)print_symbol2[`locust]
+  /// symbol: `locust
+  /// ```
+  fn get_symbol(&self) -> Result<&str, &'static str>;
+
+  /// Get an underlying q string as `&str`.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_string(string: K) -> K{
+  ///   match atom.get_str(){
+  ///     Ok(string_) => {
+  ///       println!("string: \"{}\"", string_);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_string: LIBPATH_ (`print_string; 1);
+  /// q)print_string["gnat"]
+  /// string: "gnat"
+  /// ```
+  fn get_str(&self) -> Result<&str, &'static str>;
+
+  /// Get an underlying q string as `String`.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn print_string2(string: K) -> K{
+  ///   match atom.get_string(){
+  ///     Ok(string_) => {
+  ///       println!("string: \"{}\"", string_);
+  ///       KNULL
+  ///     },
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)print_string: LIBPATH_ (`print_string; 1);
+  /// q)print_string["grasshopper"]
+  /// string: "grasshopper"
+  /// ```
+  fn get_string(&self) -> Result<String, &'static str>;
+
+  /// Append a q list object to a q list.
+  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// ```no_run
+  /// #[no_mangle]
+  /// pub extern "C" fn concat_list2(mut list1: K, list2: K) -> K{
+  ///   if let Err(err) = list1.append(list2){
+  ///     new_error(err)
+  ///   }
+  ///   else{
+  ///     increment_reference_count(list1)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)plunder: `libc_api_examples 2: (`concat_list2; 2);
+  /// q)plunder[(::; `metals; `fire); ("clay"; 316)]
+  /// ::
+  /// `metals
+  /// `fire
+  /// "clay"
+  /// 316
+  /// q)plunder[1 2 3; 4 5]
+  /// 1 2 3 4 5
+  /// q)plunder[`a`b`c; `d`e]
+  /// `a`b`c`d`e
+  /// ```
+  fn append(&mut self, list: K)->Result<K, &'static str>;
+
+  /// Add a q object to a q compound list.
+  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// # Example
+  /// ```no_run
+  /// #[no_mangle]
+  /// pub extern "C" fn create_compound_list(int: K) -> K{
+  ///   let mut list=new_simple_list(qtype::COMPOUND, 0);
+  ///   for i in 0..5{
+  ///     list.push(new_long(i)).unwrap();
+  ///   }
+  ///   list.push(increment_reference_count(int)).unwrap();
+  ///   list
+  /// }
+  /// ```
+  /// ```q
+  /// q)nums: `libc_api_examples 2: (`create_compound_list2; 1);
+  /// q)nums[5i]
+  /// 0
+  /// 1
+  /// 2
+  /// 3
+  /// 4
+  /// 5i
+  /// ```
+  /// # Note
+  /// In this example we intentionally not allocated an array by `knk(0)` to use `push` to make it grow.
+  ///  When using `push`, it accesses current value of `n` in `K`, so preallocating memory with `knk` and
+  ///  then using `push` will crash because `knk` initializes `n` with its argument. If you want to allocate
+  ///  a memory in advance, use `knk` and then substitute a value after converting the `K` into a slice
+  ///  with `as_mut_K_slice`.
+  fn push(&mut self, atom: K)->Result<K, &'static str>;
+
+  /// Add a raw value to a q simple list.
+  ///  `list` points to a `K` object, which may be reallocated during the function.
+  ///  The contents of `list`, i.e. `*list`, will be updated in case of reallocation. 
+  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// # Example
+  /// ```no_run
+  /// #[no_mangle]
+  /// pub extern "C" fn create_simple_list2(_: K) -> K{
+  ///   let mut list=new_simple_list(qtype::DATE, 0);
+  ///   for i in 0..5{
+  ///     list.push_raw(i).unwrap();
+  ///   }
+  ///   list
+  /// }
+  /// ```
+  /// ```q
+  /// q)simple_is_the_best: `lic_api_example 2: (`create_simple_list2; 1);
+  /// q)simple_is_the_best[]
+  /// 2000.01.01 2000.01.02 2000.01.03 2000.01.04 2000.01.05
+  /// ```
+  /// # Note
+  /// - Concrete type of `T` is not checked. Its type must be either of `I`, `J` and `F` and it must be compatible
+  ///  with the list type. For example, timestamp list requires `J` type atom.
+  /// - For symbol list, use [`push_symbol`](#fn.push_symbol) or [`push_symbol_n`](#fn.push_symbol_n).
+  fn push_raw<T>(&mut self, atom: T)->Result<K, &'static str>;
+
+  /// Add an internalized char array to symbol list.
+  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn create_symbol_list2(_: K) -> K{
+  ///   let mut list=new_simple_list(qtype::SYMBOL, 0);
+  ///   list.push_symbol("Abraham").unwrap();
+  ///   list.push_symbol("Isaac").unwrap();
+  ///   list.push_symbol("Jacob").unwrap();
+  ///   list.push_symbol_n("Josephine", 6).unwrap();
+  ///   list
+  /// }
+  /// ```
+  /// ```q
+  /// q)summon:`libc_api_examples 2: (`create_symbol_list2; 1)
+  /// q)summon[]
+  /// `Abraham`Isaac`Jacob`Joseph
+  /// q)`Abraham`Isaac`Jacob`Joseph ~ summon[]
+  /// 1b
+  /// ```
+  /// # Note
+  /// In this example we intentionally not allocated an array by `ktn(qtype::SYMBOL as I, 0)` to use `js`
+  ///  to make it grow. When using `js`, it accesses current value of `n` in `K`, so preallocating memory
+  ///  with `ktn` and then using `js` will crash because `ktn` initializes `n` with its argument. If you want
+  ///  to allocate a memory in advance, use `ktn` and then substitute a value after converting the `K` into a
+  ///  slice with `as_mut_symbol_slice`.
+  fn push_symbol(&mut self, symbol: &str)->Result<K, &'static str>;
+
+  /// Add an internalized char array to symbol list.
+  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// # Example
+  /// See the example of [`push_symbol`](#fn.push_symbol).
+  fn push_symbol_n(&mut self, symbol: &str, n: I)->Result<K, &'static str>;
+
+  /// Get a length of the list. More specifically, a value of `k0.value.list.n` for list types.
+  ///  Otherwise 2 for table and 1 for atom and null.
+  /// # Example
+  /// See the example of [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice).
+  fn len(&self) -> i64;
+
+  /// Get a type of `K` object.
+  fn get_type(&self) -> i8;
+
+  /// Serialize q object and return serialized q byte list object on success: otherwise null. 
+  ///  Mode is either of:
+  /// - -1: Serialize within the same process.
+  /// - 1: retain enumerations, allow serialization of timespan and timestamp: Useful for passing data between threads
+  /// - 2: unenumerate, allow serialization of timespan and timestamp
+  /// - 3: unenumerate, compress, allow serialization of timespan and timestamp
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn encrypt(object: K)->K{
+  ///   match object.q_ipc_encode(3){
+  ///     Ok(bytes) => bytes,
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// 
+  /// ```
+  fn q_ipc_encode(&self, mode: I) -> Result<K, &'static str>;
+
+  /// Deserialize a bytes into q object.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn decrypto(bytes: K)->K{
+  ///   match bytes.q_ipc_encode(){
+  ///     Ok(object) => object,
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  fn q_ipc_decode(&self) -> Result<K, &'static str>;
+}
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                            Implementation                            //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+//%% U %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+impl U{
+  /// Create 16-byte GUID object.
+  pub fn new(guid: [u8; 16]) -> Self{
+    U{guid:guid}
+  }
+}
+
+//%% K %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+unsafe impl Send for k0_inner{}
+unsafe impl Send for k0{}
+
+impl KUtility for K{
+  #[inline]
+  fn as_mut_slice<'a, T>(self) -> &'a mut[T]{
+    unsafe{
+      std::slice::from_raw_parts_mut((*self).value.list.G0.as_mut_ptr() as *mut T, (*self).value.list.n as usize)
+    }
+  }
+
+  #[inline]
+  fn get_bool(&self) -> Result<bool, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::BOOL => Ok(unsafe{(**self).value.byte != 0}),
+      _ => Err("not a bool\0")
+    }
+  }
+
+  #[inline]
+  fn get_guid(&self) -> Result<[u8; 16], &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::GUID => {
+        Ok(unsafe{std::slice::from_raw_parts((**self).value.list.G0.as_ptr(), 16)}.try_into().unwrap())
+      },
+      _ => Err("not a GUID\0")
+    }
+  }
+
+  #[inline]
+  fn get_byte(&self) -> Result<u8, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::BYTE => Ok(unsafe{(**self).value.byte}),
+      _ => Err("not a byte\0")
+    }
+  }
+
+  #[inline]
+  fn get_short(&self) -> Result<i16, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::SHORT => Ok(unsafe{(**self).value.short}),
+      _ => Err("not a short\0")
+    }
+  }
+
+  #[inline]
+  fn get_int(&self) -> Result<i32, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::INT | qtype::MONTH | qtype::DATE | qtype::MINUTE | qtype::SECOND | qtype::TIME => Ok(unsafe{(**self).value.int}),
+      _ => Err("not an int\0")
+    }
+  }
+
+  #[inline]
+  fn get_long(&self) -> Result<i64, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::LONG | qtype::TIMESTAMP | qtype::TIMESPAN => Ok(unsafe{(**self).value.long}),
+      _ => Err("not a long\0")
+    }
+  }
+
+  #[inline]
+  fn get_real(&self) -> Result<f32, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::REAL => Ok(unsafe{(**self).value.real}),
+      _ => Err("not a real\0")
+    }
+  }
+
+  #[inline]
+  fn get_float(&self) -> Result<f64, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::FLOAT | qtype::DATETIME => Ok(unsafe{(**self).value.float}),
+      _ => Err("not a float\0")
+    }
+  }
+
+  #[inline]
+  fn get_char(&self) -> Result<char, &'static str>{
+    match unsafe{(**self).qtype}.saturating_mul(-1){
+      qtype::CHAR => Ok(unsafe{(**self).value.byte as char}),
+      _ => Err("not a char\0")
+    }
+  }
+
+  #[inline]
+  fn get_symbol(&self) -> Result<&str, &'static str>{
+    if (unsafe{(**self).qtype} == -qtype::SYMBOL) || (unsafe{(**self).qtype} == qtype::ERROR){
+      Ok(S_to_str(unsafe{(**self).value.symbol}))
+    }
+    else{
+      Err("not a symbol\0")
+    }
+  }
+
+  #[inline]
+  fn get_str(&self) -> Result<&str, &'static str>{
+    match unsafe{(**self).qtype}{
+      qtype::CHAR => {
+        Ok(unsafe{str::from_utf8_unchecked_mut(self.as_mut_slice::<G>())})
+      },
+      _ => Err("not a string\0")
+    }
+  }
+
+  #[inline]
+  fn get_string(&self) -> Result<String, &'static str>{
+    match unsafe{(**self).qtype}{
+      qtype::CHAR => {
+        Ok(unsafe{String::from_utf8_unchecked(self.as_mut_slice::<G>().to_vec())})
+      },
+      _ => Err("not a string\0")
+    }
+  }
+
+  #[inline]
+  fn append(&mut self, list: K)->Result<K, &'static str>{
+    if unsafe{(**self).qtype} >= 0 && unsafe{(**self).qtype} == unsafe{(*list).qtype}{
+      Ok(unsafe{native::jv(self, list)})
+    }
+    else{
+      Err("not a list or types do not match\0")
+    }
+  }
+
+  #[inline]
+  fn push(&mut self, atom: K)->Result<K, &'static str>{
+    if unsafe{(**self).qtype} == 0 {
+      Ok(unsafe{native::jk(self, atom)})
+    }
+    else{
+      Err("not a list or types do not match\0")
+    }
+  }
+
+  #[inline]
+  fn push_raw<T>(&mut self, mut atom: T)->Result<K, &'static str>{
+    match unsafe{(**self).qtype}{
+      _t@1..=19 => Ok(unsafe{native::ja(self, std::mem::transmute::<*mut T, *mut V>(&mut atom))}),
+      _ => Err("not a simple list or types do not match\0")
+    }
+  }
+
+  #[inline]
+  fn push_symbol(&mut self, symbol: &str)->Result<K, &'static str>{
+    if unsafe{(**self).qtype} == qtype::SYMBOL {
+      Ok(unsafe{native::js(self, native::ss(str_to_S!(symbol)))})
+    }
+    else{
+      Err("not a symbol list\0")
+    }
+  }
+
+  #[inline]
+  fn push_symbol_n(&mut self, symbol: &str, n: I)->Result<K, &'static str>{
+    if unsafe{(**self).qtype} == qtype::SYMBOL {
+      Ok(unsafe{native::js(self, native::sn(str_to_S!(symbol), n))})
+    }
+    else{
+      Err("not a symbol list or types do not match\0")
+    }
+  }
+
+  #[inline]
+  fn len(&self) -> i64{
+    unsafe{
+      if (**self).qtype < 0 || (**self).qtype == qtype::NULL{
+        // Atom or (::)
+        1
+      }
+      else if (**self).qtype == qtype::Table{
+        // In case of table it has K must access `table` (K) and it is a dictionary
+        //  whose `value.list.n` is 2
+        2
+      }
+      else{
+        // List or dictionary
+        (**self).value.list.n
+      }
+    }
+  }
+
+  #[inline]
+  fn get_type(&self) -> i8{
+    unsafe{(**self).qtype}
+  }
+
+  #[inline]
+  fn q_ipc_encode(&self, mode: I) -> Result<K, &'static str>{
+    let result=error_to_string(unsafe{
+      native::b9(mode, *self)
+    });
+    match unsafe{(*result).qtype}{
+      qtype::ERROR => {
+        decrement_reference_count(result);
+        Err("failed to encode\0")
+      },
+      _ => Ok(result)
+    }
+  }
+
+  #[inline]
+  fn q_ipc_decode(&self) -> Result<K, &'static str>{
+    match unsafe{(**self).qtype}{
+      qtype::BYTE => {
+        let result=error_to_string(unsafe{
+          native::d9(*self)
+        });
+        match unsafe{(*result).qtype}{
+          qtype::ERROR => {
+            decrement_reference_count(result);
+            Err("failed to decode\0")
+          },
+          _ => Ok(result)
+        }
+      },
+      _ => Err("not bytes\0")
+    }
+  }
+}
+
+impl k0{
+  /// Derefer `k0` as a mutable slice. For supported types, see [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice)
+  /// # Note
+  /// Used if `K` needs to be sent to another thread. `K` cannot implement `Send` and therefore
+  ///  its inner struct must besent instead.
+  /// # Example
+  /// See the example of [`setm`](fn.setm.html).
+  #[inline]
+  pub fn as_mut_slice<'a, T>(&mut self) -> &'a mut[T]{
+    unsafe{
+      std::slice::from_raw_parts_mut(self.value.list.G0.as_mut_ptr() as *mut T, self.value.list.n as usize)
+    }
+  }
+}
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                              Utility                                 //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+//%% Utility %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Convert `S` to `&str`. This function is intended to convert symbol type (null-terminated char-array) to `str`.
+/// # Extern
+/// ```no_run
+/// #[macro_use]
+/// extern crate kdb_c_api;
+/// 
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn print_symbol(symbol: K) -> K{
+///   unsafe{
+///     if (*symbol).qtype == -qtype::SYMBOL{
+///       println!("symbol: `{}", S_to_str((*symbol).value.symbol));
+///     }
+///     // return null
+///     KNULL
+///   }
+/// }
+/// ```
+/// ```q
+/// q)print_symbol:`libc_api_examples 2: (`print_symbol; 1)
+/// q)a:`kx
+/// q)print_symbol a
+/// symbol: `kx
+/// ```
+#[inline]
+pub fn S_to_str<'a>(cstring: S) -> &'a str{
+  unsafe{
+    CStr::from_ptr(cstring).to_str().unwrap()
+  }
+}
+
+/// Convert `&str` to `S`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn bigbang2(_: K) -> K{
+///   unsafe{ks(null_terminated_str_to_S("super_illusion\0"))}
+/// }
+/// ```
+/// ```q
+/// q)bigbang: `libc_api_examples 2: (`bigbang2; 1);
+/// q)bigbang[]
+/// `super_illusion
+/// ```
+#[inline]
+pub fn null_terminated_str_to_S(string: &str) -> S {
+  unsafe{
+    CStr::from_bytes_with_nul_unchecked(string.as_bytes()).as_ptr() as S
+  }
+}
+
+/// Convert null terminated `&str` into `const_S`. Expected usage is to build
+///  a q error with `krr`.
+/// # Example
+/// ```
+/// #[macro_use]
+/// extern crate kdb_c_api;
+/// 
+/// use kdb_c_api::*;
+/// 
+/// pub extern "C" fn must_be_int2(obj: K) -> K{
+///   unsafe{
+///     if (*obj).qtype != -qtype::INT{
+///       krr(null_terminated_str_to_const_S("not an int\0"))
+///     }
+///     else{
+///       KNULL
+///     }
+///   }
+/// }
+/// ```
+/// ```q
+/// q)check:`libc_api_examples 2: (`must_be_int; 1)
+/// q)a:100
+/// q)check a
+/// 'not an int
+///   [0]  check a
+///        ^
+/// q)a:42i
+/// q)check a
+/// ```
+pub fn null_terminated_str_to_const_S(string: &str) -> const_S {
+  string.as_bytes().as_ptr() as const_S
+}
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                              Re-export                               //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+//%% Constructor %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Constructor of q bool object. Relabeling of `kb`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_bool(_: K) -> K{
+///   new_bool(0)
+/// }
+/// ```
+/// ```q
+/// q)no: `libc_api_examples 2: (`create_bool; 1);
+/// q)no[]
+/// 0b
+/// ```
+#[inline]
+pub fn new_bool(boolean: I) -> K{
+  unsafe{
+    native::kb(boolean)
+  }
+}
+
+/// Constructor of q GUID object. Relabeling of `ku`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_guid(_: K) -> K{
+///   new_guid([0x1e_u8, 0x11, 0x17, 0x0c, 0x42, 0x24, 0x25, 0x2c, 0x1c, 0x14, 0x1e, 0x22, 0x4d, 0x3d, 0x46, 0x24])
+/// }
+/// ```
+/// ```q
+/// q)create_guid: `libc_api_examples 2: (`create_guid; 1);
+/// q)create_guid[]
+/// 1e11170c-4224-252c-1c14-1e224d3d4624
+/// ```
+#[inline]
+pub fn new_guid(guid: [G; 16]) -> K{
+  unsafe{
+    native::ku(U::new(guid))
+  }
+}
+
+/// Constructor of q byte object. Relabeling of `kg`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_byte(_: K) -> K{
+///   new_byte(0x3c)
+/// }
+/// ```
+/// ```q
+/// q)create_byte: `libc_api_examples 2: (`create_byte; 1);
+/// q)create_byte[]
+/// 0x3c
+/// ```
+#[inline]
+pub fn new_byte(byte: I) -> K{
+  unsafe{
+    native::kg(byte)
+  }
+}
+
+/// Constructor of q short object. Relabeling of `kh`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_short(_: K) -> K{
+///   new_short(-144)
+/// }
+/// ```
+/// ```q
+/// q)shortage: `libc_api_examples 2: (`create_short; 1);
+/// q)shortage[]
+/// -144h
+/// ```
+#[inline]
+pub fn new_short(short: I) -> K{
+  unsafe{
+    native::kh(short)
+  }
+}
+
+/// Constructor of q int object. Relabeling of `ki`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_int(_: K) -> K{
+///   new_int(86400000)
+/// }
+/// ```
+/// ```q
+/// q)trvial: `libc_api_examples 2: (`create_int; 1);
+/// q)trivial[]
+/// 86400000i
+/// ```
+#[inline]
+pub fn new_int(int: I) -> K{
+  unsafe{
+    native::ki(int)
+  }
+}
+
+/// Constructor of q long object. Relabeling of `kj`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_long(_: K) -> K{
+///   new_long(-668541276001729000)
+/// }
+/// ```
+/// ```q
+/// q)lengthy: `libc_api_examples 2: (`create_long; 1);
+/// q)lengthy[]
+/// -668541276001729000
+/// ```
+#[inline]
+pub fn new_long(long: J) -> K{
+  unsafe{
+    native::kj(long)
+  }
+}
+
+/// Constructor of q real object. Relabeling of `ke`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_real(_: K) -> K{
+///   new_real(0.00324)
+/// }
+/// ```
+/// ```q
+/// q)reality: `libc_api_examples 2: (`create_real; 1);
+/// q)reality[]
+/// 0.00324e
+/// ```
+#[inline]
+pub fn new_real(real: F) -> K{
+  unsafe{
+    native::ke(real)
+  }
+}
+
+/// Constructor of q float object. Relabeling of `kf`.
+/// # Example
+/// ```
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_float(_: K) -> K{
+///   new_float(-6302.620)
+/// }
+/// ```
+/// ```q
+/// q)coffee_float: `libc_api_examples 2: (`create_float; 1);
+/// q)coffee_float[]
+/// -6302.62
+/// ```
+#[inline]
+pub fn new_float(float: F) -> K{
+  unsafe{
+    native::kf(float)
+  }
+}
+
+///  Constructor of q char object. Relabeling of `kc`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_char2(_: K) -> K{
+///   new_char('t')
+/// }
+/// ```
+/// ```q
+/// q)heavy: `libc_api_examples 2: (`create_char2; 1);
+/// q)heavy[]
+/// "t"
+/// ```
+#[inline]
+pub fn new_char(character: char) -> K{
+  unsafe{
+    native::kc(character as I)
+  }
+}
+
+/// Constructor of q symbol object. Relabeling of `ks`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_symbol2(_: K) -> K{
+///   new_symbol("symbolic")
+/// }
+/// ```
+/// ```q
+/// q)hard: `libc_api_examples 2: (`create_symbol2; 1);
+/// q)hard[]
+/// `symbolic
+/// q)`symbolic ~ hard[]
+/// 1b
+/// ```
+#[inline]
+pub fn new_symbol(symbol: &str) -> K{
+  unsafe{
+    native::ks(str_to_S!(symbol))
+  }
+}
+
+/// Constructor of q timestamp or timespan object. Relabeling of `ktj`.
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_timestamp2(_: K) -> K{
+///   // 2015.03.16D00:00:00:00.000000000
+///   new_timestamp(479779200000000000)
+/// }
+/// ```
+/// ```q
+/// q)stamp: `libc_api_examples 2: (`create_timestamp2; 1);
+/// q)stamp[]
+/// 2015.03.16D00:00:00.000000000
+/// ```
+#[inline]
+pub fn new_timestamp(nanoseconds: J) -> K{
+  unsafe{
+    native::ktj(-qtype::TIMESTAMP as I, nanoseconds)
+  }
+}
+
+/// Create a month object. This is a complememtal constructor of
+///  missing month type.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_month(_: K) -> K{
+///   // 2010.07m
+///   new_month(126)
+/// }
+/// ```
+/// ```q
+/// q)create_month: `libc_api_examples 2: (`create_month; 1);
+/// q)create_month[]
+/// 2010.07m
+/// ```
+#[inline]
+pub fn new_month(months: I) -> K{
+  unsafe{
+    let month=native::ka(-qtype::MONTH as I);
+    (*month).value.int=months;
+    month
+  }
+}
+
+/// Constructor of q date object. Relabeling of `kd`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_date(_: K) -> K{
+///   // 1999.12.25
+///   new_date(-7)
+/// }
+/// ```
+/// ```q
+/// q)nostradamus: `libc_api_examples 2: (`create_date; 1);
+/// q)nostradamus[]
+/// 1999.12.25
+/// ```
+#[inline]
+pub fn new_date(days: I) -> K{
+  unsafe{
+    native::kd(days)
+  }
+}
+
+/// Constructor of q datetime object. Relabeling of `kz`.
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_datetime(_: K) -> K{
+///   // 2015.03.16T12:00:00:00.000
+///   new_datetime(5553.5)
+/// }
+/// ```
+/// ```q
+/// q)omega_date: libc_api_examples 2: (`create_datetime; 1);
+/// q)omega_date[]
+/// 2015.03.16T12:00:00.000
+/// ```
+#[inline]
+pub fn new_datetime(days: F) -> K{
+  unsafe{
+    native::kz(days)
+  }
+}
+
+/// Constructor of q timestamp or timespan object. Relabeling of `ktj`.
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_timespan2(_: K) -> K{
+///   // -1D01:30:00.001234567
+///   new_timespan(-91800001234567)
+/// }
+/// ```
+/// ```q
+/// q)duration: libc_api_examples 2: (`create_timespan2; 1);
+/// q)duration[]
+/// -1D01:30:00.001234567
+/// ```
+#[inline]
+pub fn new_timespan(nanoseconds: J) -> K{
+  unsafe{
+    native::ktj(-qtype::TIMESPAN as I, nanoseconds)
+  }
+}
+
+/// Create a month object. This is a complememtal constructor of
+///  missing minute type.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_minute(_: K) -> K{
+///   // 10:40
+///   new_minute(640)
+/// }
+/// ```
+/// ```q
+/// q)minty: `libc_api_examples 2: (`create_minute; 1);
+/// q)minty[]
+/// 10:40
+/// ```
+#[inline]
+pub fn new_minute(minutes: I) -> K{
+  unsafe{
+    let minute=native::ka(-qtype::MINUTE as I);
+    (*minute).value.int=minutes;
+    minute
+  }
+}
+
+/// Create a month object. This is a complememtal constructor of
+///  missing second type.
+/// # Example
+/// ```no_run
+/// #[no_mangle]
+/// pub extern "C" fn create_second(_: K) -> K{
+///   // -02:00:00
+///   new_second(-7200)
+/// }
+/// ```
+/// ```q
+/// q)third: `libc_api_examples 2: (`create_second; 1);
+/// q)third[]
+/// -02:00:00
+/// ```
+#[inline]
+pub fn new_second(seconds: I) -> K{
+  unsafe{
+    let second=native::ka(-qtype::SECOND as I);
+    (*second).value.int=seconds;
+    second
+  }
+}
+
+/// Constructor of q time object. Relabeling of `kt`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_time(_: K) -> K{
+///   // -01:30:00.123
+///   new_time(-5400123)
+/// }
+/// ```
+/// ```q
+/// q)ancient: libc_api_examples 2: (`create_time; 1);
+/// q)ancient[]
+/// -01:30:00.123
+/// ```
+#[inline]
+pub fn new_time(milliseconds: I) -> K{
+  unsafe{
+    native::kt(milliseconds)
+  }
+}
+
+/// Constructor of q simple list.
+/// # Example
+/// See the example of [`new_dictionary`](fn.new_dictionary.html).
+#[inline]
+pub fn new_simple_list(qtype: i8, length: J) -> K{
+  unsafe{
+    native::ktn(qtype as I, length)
+  }
+}
+
+/// Constructor of q string object.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_string(_: K) -> K{
+///   new_string("this is a text.")
+/// }
+/// ```
+/// ```q
+/// q)text: libc_api_examples 2: (`create_string; 1);
+/// q)text[]
+/// "this is a text."
+/// ```
+#[inline]
+pub fn new_string(string: &str) -> K{
+  unsafe{
+    native::kp(str_to_S!(string))
+  }
+}
+
+/// Constructor if q string object with a fixed length.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_string2(_: K) -> K{
+///   unsafe{kpn(str_to_S!("The meeting was too long and I felt it s..."), 24)}
+/// }
+/// ```
+/// ```q
+/// q)speak_inwardly: libc_api_examples 2: (`create_string2; 1);
+/// q)speak_inwardly[]
+/// "The meeting was too long"
+/// ```
+#[inline]
+pub fn new_string_n(string: &str, length: J) -> K{
+  unsafe{
+    native::kpn(str_to_S!(string), length)
+  }
+}
+
+/// Constructor of q dictionary object.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_dictionary() -> K{
+///   let keys=new_simple_list(qtype::INT, 2);
+///   keys.as_mut_slice::<I>()[0..2].copy_from_slice(&[0, 1]);
+///   let values=new_simple_list(qtype::COMPOUND, 2);
+///   let date_list=new_simple_list(qtype::DATE, 3);
+///   // 2000.01.01 2000.01.02 2000.01.03
+///   date_list.as_mut_slice::<I>()[0..3].copy_from_slice(&[0, 1, 2]);
+///   let string=new_string("I'm afraid I would crash the application...");
+///   values.as_mut_slice::<K>()[0..2].copy_from_slice(&[date_list, string]);
+///   new_dictionary(keys, values)
+/// }
+/// ```
+/// ```q
+/// q)create_dictionary: `libc_api_examples 2: (`create_dictionary; 1);
+/// q)create_dictionary[]
+/// 0| 2000.01.01 2000.01.02 2000.01.03
+/// 1| "I'm afraid I would crash the application..."
+/// ```
+#[inline]
+pub fn new_dictionary(keys: K, values: K) -> K{
+  unsafe{
+    native::xD(keys, values)
+  }
+}
+
+/// Constructor of q error. The input must be null-terminated.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// pub extern "C" fn thai_kick(_: K) -> K{
+///   new_error("Thai kick unconditionally!!\0")
+/// }
+/// ```
+/// ```q
+/// q)monstrous: `libc_api_examples 2: (`thai_kick; 1);
+/// q)monstrous[]
+/// 'Thai kick unconditionally!!
+/// [0]  monstrous[]
+///      ^
+/// ```
+#[inline]
+pub fn new_error(message: &str) -> K{
+  unsafe{
+    native::krr(null_terminated_str_to_const_S(message))
+  }
+}
+
+/// Similar to `new_error` but this function appends a system-error message to string `S` before passing it to internal `krr`.
+///  The input must be null-terminated.
+#[inline]
+pub fn new_error_os(message: &str) -> K{
+  unsafe{
+    native::orr(null_terminated_str_to_const_S(message))
+  }
+}
+
+/// Convert error object into usual K object which has the error string in the field `s`.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// extern "C"{
+///   fn no_panick(func: K, args: K) -> K{
+///     let result=error_to_string(apply(func, args));
+///     if result.get_type() == qtype::ERROR{
+///       println!("FYI: {}", result.get_symbol().unwrap());
+///       // Decrement reference count of the error object which is no longer used.
+///       decrement_reference_count(result);
+///       return KNULL;
+///     }
+///     else{
+///       result
+///     }
+///   }
+/// }
+/// ```
+/// ```q
+/// q)chill: `libc_api_examples 2: (`no_panick; 2);
+/// q)chill[$; ("J"; "42")]
+/// success!
+/// 42
+/// q)chill[+; (1; `a)]
+/// FYI: type
+/// ```
+#[inline]
+pub fn error_to_string(error: K) -> K{
+  unsafe{
+    native::ee(error)
+  }
+}
+
+//%% Symbol %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Intern `n` chars from a char array.
+///  Returns an interned char array and should be used to add char array to a symbol vector.
+/// # Example
+/// See the example of [`flip`](fn.flip.html).
+#[inline]
+pub fn internalize_n(string: S, n: I) -> S{
+  unsafe{
+    native::sn(string, n)
+  }
+}
+
+/// Intern a null-terminated char array.
+///  Returns an interned char array and should be used to add char array to a symbol vector.
+/// # Example
+/// See the example of [`flip`](fn.flip.html).
+#[inline]
+pub fn internalize(string: S) -> S{
+  unsafe{
+    native::ss(string)
+  }
+}
+
+//%% Table %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+// Constructor of q table object from q dictionary object.
+/// # Note
+/// Basically this is a `flip` command of q. Hence the value of the dictionary must have
+///  lists as its elements.
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_table2(_: K) -> K{
+///   // Build keys
+///   let keys=new_simple_list(qtype::SYMBOL, 2);
+///   let keys_slice=keys.as_mut_slice::<S>();
+///   keys_slice[0]=internalize(str_to_S!("time"));
+///   keys_slice[1]=internalize_n(str_to_S!("temperature_and_humidity"), 11);
+///   
+///   // Build values
+///   let values=new_simple_list(qtype::COMPOUND, 2);
+///   let time=new_simple_list(qtype::TIMESTAMP, 3);
+///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+///   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+///   let temperature=new_simple_list(qtype::FLOAT, 3);
+///   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+///   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+///   
+///   flip(new_dictionary(keys, values))
+/// }
+/// ```
+/// ```q
+/// q)climate_change: libc_api_examples 2: (`create_table2; 1);
+/// q)climate_change[]
+/// time                          temperature
+/// -----------------------------------------
+/// 2003.10.10D02:24:19.167018272 22.1       
+/// 2006.05.24D06:16:49.419710368 24.7       
+/// 2008.08.12D23:12:24.018691392 30.5    
+/// ```
+#[inline]
+pub fn flip(dictionary: K) -> K{
+  match unsafe{(*dictionary).qtype}{
+    qtype::DICTIONARY => unsafe{native::xT(dictionary)},
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a dictionary"))}
+  }
+}
+
+/// Constructor of simple q table object from q keyed table object.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_keyed_table(dummy: K) -> K{
+///   enkey(create_table(dummy), 1)
+/// }
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn keyed_to_simple_table(dummy: K) -> K{
+///   unkey(create_keyed_table(dummy))
+/// }
+/// ```
+/// ```q
+/// q)unkey: libc_api_examples 2: (`keyed_to_simple_table; 1);
+/// q)unkey[]
+/// time                          temperature
+/// -----------------------------------------
+/// 2003.10.10D02:24:19.167018272 22.1       
+/// 2006.05.24D06:16:49.419710368 24.7       
+/// 2008.08.12D23:12:24.018691392 30.5    
+/// ```
+#[inline]
+pub fn unkey(keyed_table: K) -> K{
+  match unsafe{(*keyed_table).qtype}{
+    qtype::DICTIONARY => unsafe{native::ktd(keyed_table)},
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a keyed table"))}
+  }
+}
+
+/// Constructor of q keyed table object.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn create_keyed_table(dummy: K) -> K{
+///   enkey(create_table(dummy), 1)
+/// }
+/// ```
+/// ```q
+/// q)locker: libc_api_examples 2: (`create_keyed_table; 1);
+/// q)locker[]
+/// time                         | temperature
+/// -----------------------------| -----------
+/// 2003.10.10D02:24:19.167018272| 22.1       
+/// 2006.05.24D06:16:49.419710368| 24.7       
+/// 2008.08.12D23:12:24.018691392| 30.5  
+/// ```
+#[inline]
+pub fn enkey(table: K, n: J) -> K{ 
+  match unsafe{(*table).qtype}{
+    qtype::Table => unsafe{native::knt(n, table)},
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a table"))}
+  }
+}
+
+//%% Reference Count %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Decrement reference count of the q object. The decrement must be done when `k` function gets an error
+///  object whose type is `qtype::ERROR` and when you created an object but do not intend to return it to
+///  q side. See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn agriculture(_: K)->K{
+///   // Produce an apple.
+///   let fruit=new_symbol("apple");
+///   // Sow the apple seed.
+///   decrement_reference_count(fruit);
+///   // Return null.
+///   KNULL
+/// }
+/// ```
+/// ```q
+/// q)do_something: libc_api_examples 2: (`agriculture; 1);
+/// q)do_something[]
+/// q)
+/// ```
+#[inline]
+pub fn decrement_reference_count(qobject: K) -> V{
+  unsafe{native::r0(qobject)}
+}
+
+/// Increment reference count of the q object. Increment must be done when you passed arguments
+///  to Rust function and intends to return it to q side or when you pass some `K` objects to `k`
+///  function and intend to use the parameter after the call.
+///  See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// fn eat(apple: K){
+///   println!("おいしい！");
+/// }
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn satisfy_5000_men(apple: K) -> K{
+///   for _ in 0..10{
+///     eat(apple);
+///   }
+///   unsafe{k(0, "eat", increment_reference_count(apple), KNULL);}
+///   increment_reference_count(apple)  
+/// }
+/// ```
+/// ```q
+/// q)eat:{[apple] show "Collect the clutter of apples!";}
+/// q)bread_is_a_sermon: libc_api_examples 2: (`satisfy_5000_men; 1);
+/// q)bread_is_a_sermon[`green_apple]
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// おいしい！
+/// "Collect the clutter of apples!"
+/// ```
+#[inline]
+pub fn increment_reference_count(qobject: K) -> K{
+  unsafe{native::r1(qobject)}
+}
+
+//%% Callback %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Remove callback from the associated kdb+ socket and call `kclose`.
+///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+/// # Note
+/// A function which calls this function must be executed at the exit of the process.
+#[inline]
+pub fn destroy_socket(socket: I){
+  unsafe{
+    native::sd0(socket);
+  }
+}
+
+/// Remove callback from the associated kdb+ handle and call `kclose` if the given condition is satisfied.
+///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+/// # Note
+/// A function which calls this function must be executed at the exit of the process.
+#[inline]
+pub fn destroy_socket_if(socket: I, condition: bool){
+  unsafe{
+    native::sd0x(socket, condition as I);
+  }
+}
+
+/// Register callback to the associated kdb+ handle.
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// static mut PIPE:[I; 2]=[-1, -1];
+///
+/// // Callback for some message queue.
+/// extern "C" fn callback(socket: I)->K{
+///   let mut buffer: [K; 1]=[0 as K];
+///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
+///   let result=error_to_string(unsafe{native::k(0, str_to_S!("shout"), buffer[0], KNULL)});
+///   if result.get_type() == qtype::ERROR{
+///     eprintln!("Execution error: {}", result.get_symbol().unwrap());
+///     decrement_reference_count(result);
+///   };
+///   KNULL
+/// }
+/// 
+/// #[no_mangle]
+/// pub extern "C" fn plumber(_: K) -> K{
+///   if 0 != unsafe{pipe(PIPE.as_mut_ptr())}{
+///     return new_error("Failed to create pipe\0");
+///   }
+///   if KNULL == register_callback(unsafe{PIPE[0]}, callback){
+///     return new_error("Failed to ergister callback\0");
+///   }
+///   // Lock symbol in a worker thread.
+///   pin_symbol();
+///   let handle=std::thread::spawn(move ||{
+///     let mut precious=new_simple_list(qtype::SYMBOL, 3);
+///     let precious_array=precious.as_mut_slice::<S>();
+///     precious_array[0]=internalize(null_terminated_str_to_S("belief\0"));
+///     precious_array[1]=internalize(null_terminated_str_to_S("love\0"));
+///     precious_array[2]=internalize(null_terminated_str_to_S("hope\0"));
+///     unsafe{libc::write(PIPE[1], std::mem::transmute::<*mut K, *mut V>(&mut precious), 8)};
+///   });
+///   handle.join().unwrap();
+///   unpin_symbol();
+///   KNULL
+/// }
+/// ```
+/// ```q
+/// q)fall_into_pipe: `libc_api_example 2: (`plumber; 1);
+/// q)fall_into_pipe[]
+/// What are the three largest elements?: `belief`love`hope
+/// ```
+#[inline]
+pub fn register_callback(socket: I, function: extern fn(I) -> K) -> K{
+  unsafe{
+    native::sd1(socket, function)
+  }
+}
+
+//%% Miscellaneous %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
+
+/// Apply a function to q list object `.[func; args]`.
+/// # Example
+/// See the example of [`error_to_string`](fn.error_to_string).
+#[inline]
+pub fn apply(func: K, args: K) -> K{
+  unsafe{native::dot(func, args)}
+}
+
+/// Lock a location of internalized symbol in remote threads.
+///  Returns the previously set value.
+/// # Example
+/// See the example of [`register_callback`](fn.register_callback).
+#[inline]
+pub fn pin_symbol() -> I{
+  unsafe{
+    native::setm(1)
+  }
+}
+
+/// Unlock a location of internalized symbol in remote threads. 
+/// # Example
+/// See the example of [`register_callback`](fn.register_callback).
+#[inline]
+pub fn unpin_symbol() -> I{
+  unsafe{
+    native::setm(0)
+  }
+}
+
+/// Convert ymd to days from `2000.01.01`.
+/// # Example
+/// ```
+/// use kdb_c_api::*;
+/// 
+/// fn main(){
+/// 
+///   let days=ymd_to_days(2020, 4, 1);
+///   assert_eq!(days, 7396);
+/// 
+/// }
+/// ```
+pub fn ymd_to_days(year: I, month: I, date:I) -> I{
+  unsafe{
+    native::ymd(year, month, date)
+  }
+}
+
+/// Convert days from `2000.01.01` to a number expressed as `yyyymmdd`.
+/// # Example
+/// ```
+/// use kdb_c_api::*;
+/// 
+/// fn main(){
+/// 
+///   let number=days_to_ymd(7396);
+///   assert_eq!(number, 20200401);
+/// 
+/// }
+/// ```
+pub fn days_to_ymd(days: I) -> I{
+  unsafe{
+    native::dj(days)
+  }
+}

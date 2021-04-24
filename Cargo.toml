@@ -1,0 +1,3 @@
+
+[workspace]
+members=["kdb_c_api", "c_api_examples"]

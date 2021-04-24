@@ -1,0 +1,18 @@
+[package]
+name = "c_api_examples"
+version = "0.1.0"
+authors = ["diamondrod"]
+edition = "2018"
+description = """
+NOT A PACKAGE TO PUBLISH.
+
+This module provides examples of using `kdb_c_api` library. The functions defined in
+ the library are used for simple tests.
+"""
+
+[lib]
+crate-type=["cdylib"]
+
+[dependencies]
+libc="^0.2"
+kdb_c_api={path="../kdb_c_api"}
