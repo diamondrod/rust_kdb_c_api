@@ -748,7 +748,7 @@ pub extern "C" fn keep_out(_: K) -> K{
 
 /// Example of `error_to_string`.
 #[no_mangle]
-fn no_panick(func: K, args: K) -> K{
+pub extern "C" fn no_panick(func: K, args: K) -> K{
   let result=error_to_string(apply(func, args));
   if result.get_type() == qtype::ERROR{
     println!("FYI: {}", result.get_symbol().unwrap());

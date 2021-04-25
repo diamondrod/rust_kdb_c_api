@@ -345,8 +345,8 @@ extern "C"{
   /// pub extern "C" fn create_table(_: K) -> K{
   ///   let keys=unsafe{ktn(qtype::SYMBOL as I, 2)};
   ///   let keys_slice=keys.as_mut_slice::<S>();
-  ///   keys_slice[0]=ss(str_to_S!("time"));
-  ///   keys_slice[1]=ss(str_to_S!("temperature"));
+  ///   keys_slice[0]=unsafe{ss(str_to_S!("time"))};
+  ///   keys_slice[1]=unsafe{ss(str_to_S!("temperature"))};
   ///   let values=unsafe{knk(2)};
   ///   let time=unsafe{ktn(qtype::TIMESTAMP as I, 3)};
   ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
@@ -375,6 +375,22 @@ extern "C"{
   /// use kdb_c_api::native::*;
   /// 
   /// #[no_mangle]
+  /// pub extern "C" fn create_table(_: K) -> K{
+  ///   let keys=unsafe{ktn(qtype::SYMBOL as I, 2)};
+  ///   let keys_slice=keys.as_mut_slice::<S>();
+  ///   keys_slice[0]=unsafe{ss(str_to_S!("time"))};
+  ///   keys_slice[1]=unsafe{ss(str_to_S!("temperature"))};
+  ///   let values=unsafe{knk(2)};
+  ///   let time=unsafe{ktn(qtype::TIMESTAMP as I, 3)};
+  ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+  ///   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+  ///   let temperature=unsafe{ktn(qtype::FLOAT as I, 3)};
+  ///   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+  ///   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+  ///   unsafe{xT(xD(keys, values))}
+  /// }
+  /// 
+  /// #[no_mangle]
   /// pub extern "C" fn create_keyed_table(dummy: K) -> K{
   ///   unsafe{knt(1, create_table(dummy))}
   /// }
@@ -400,6 +416,22 @@ extern "C"{
   /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn create_table(_: K) -> K{
+  ///   let keys=unsafe{ktn(qtype::SYMBOL as I, 2)};
+  ///   let keys_slice=keys.as_mut_slice::<S>();
+  ///   keys_slice[0]=unsafe{ss(str_to_S!("time"))};
+  ///   keys_slice[1]=unsafe{ss(str_to_S!("temperature"))};
+  ///   let values=unsafe{knk(2)};
+  ///   let time=unsafe{ktn(qtype::TIMESTAMP as I, 3)};
+  ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+  ///   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+  ///   let temperature=unsafe{ktn(qtype::FLOAT as I, 3)};
+  ///   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+  ///   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+  ///   unsafe{xT(xD(keys, values))}
+  /// }
   /// 
   /// #[no_mangle]
   /// pub extern "C" fn create_keyed_table(dummy: K) -> K{
@@ -479,7 +511,7 @@ extern "C"{
   ///   let mut list=unsafe{ktn(qtype::TIMESTAMP as I, 0)};
   ///   for i in 0..5{
   ///     let mut timestamp=86400000000000 * i as J;
-  ///     unsafe{ja(&mut list, std::mem::transmute::<*mut J, *mut V>(&mut timestamp))}
+  ///     unsafe{ja(&mut list, std::mem::transmute::<*mut J, *mut V>(&mut timestamp))};
   ///   }
   ///   list
   /// }
@@ -600,19 +632,17 @@ extern "C"{
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
   /// 
-  /// extern "C"{
-  ///   fn catchy(func: K, args: K) -> K{
-  ///     unsafe{
-  ///       let result=ee(dot(func, args));
-  ///       if (*result).qtype == qtype::ERROR{
-  ///         println!("error: {}", (*result).symbol);
-  ///         // Decrement reference count of the error object
-  ///         r0(result);
-  ///         return KNULL!();
-  ///       }
-  ///       else{
-  ///         result
-  ///       }
+  /// extern "C" fn catchy(func: K, args: K) -> K{
+  ///   unsafe{
+  ///     let result=ee(dot(func, args));
+  ///     if (*result).qtype == qtype::ERROR{
+  ///       println!("error: {}", S_to_str((*result).value.symbol));
+  ///       // Decrement reference count of the error object
+  ///       r0(result);
+  ///       KNULL
+  ///     }
+  ///     else{
+  ///       result
   ///     }
   ///   }
   /// }
@@ -650,7 +680,7 @@ extern "C"{
   ///   }
   ///    // Format list of dictionary as a table. 
   ///    // ([] a: 0 10 20i; b: 0 100 200i)
-  ///    unsafe{k(0, str_to_S!("{[dicts] -1 _ dicts, (::)}"), dicts, KNULL!())}
+  ///    unsafe{k(0, str_to_S!("{[dicts] -1 _ dicts, (::)}"), dicts, KNULL)}
   /// }
   /// ```
   /// ```q
@@ -729,7 +759,6 @@ extern "C"{
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
   /// use std::ffi::c_void;
-  /// use libc::send;
   /// 
   /// // Send asynchronous query to the q process which sent a query to the caller of this function.
   /// extern "C" fn counter(socket: I) -> K{
@@ -750,8 +779,8 @@ extern "C"{
   ///   // Data
   ///   message.extend_from_slice(extra_query);
   ///   // Send
-  ///   unsafe{send(socket, message.as_slice().as_ptr() as *const c_void, total_length, 0)};
-  ///   KNULL!()
+  ///   unsafe{libc::send(socket, message.as_slice().as_ptr() as *const c_void, total_length, 0)};
+  ///   KNULL
   /// }
   ///
   /// #[no_mangle]
@@ -762,7 +791,7 @@ extern "C"{
   ///       return krr(null_terminated_str_to_const_S("Failed to hook\0"));
   ///     }
   ///     else{
-  ///       KNULL!()
+  ///       KNULL
   ///     }
   ///   }
   /// }
@@ -811,7 +840,7 @@ extern "C"{
   ///     r0(int);
   ///   }
   ///   // Return null.
-  ///   KNULL!()
+  ///   KNULL
   /// }
   /// ```
   /// ```q
@@ -832,10 +861,10 @@ extern "C"{
   /// 
   /// #[no_mangle]
   /// pub extern "C" fn pass_through_cave(pedestrian: K) -> K{
-  ///   let item=unsafe{k(0, str_to_S!("get_item1"), r1(pedestrian), KNULL!())};
+  ///   let item=unsafe{k(0, str_to_S!("get_item1"), r1(pedestrian), KNULL)};
   ///   println!("What do you see, son of man?: {}", item.get_str().expect("oh no"));
   ///   unsafe{r0(item)};
-  ///   let item=unsafe{k(0, str_to_S!("get_item2"), r1(pedestrian), KNULL!())};
+  ///   let item=unsafe{k(0, str_to_S!("get_item2"), r1(pedestrian), KNULL)};
   ///   println!("What do you see, son of man?: {}", item.get_str().expect("oh no"));
   ///   unsafe{
   ///     r0(item);
@@ -924,7 +953,7 @@ extern "C"{
 
   /// Convert ymd to the number of days from `2000.01.01`.
   /// # Example
-  /// ```
+  /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
   /// 
@@ -939,7 +968,7 @@ extern "C"{
 
   /// Convert days from `2000.01.01` to a number expressed as `yyyymmdd`.
   /// # Example
-  /// ```
+  /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
   /// 

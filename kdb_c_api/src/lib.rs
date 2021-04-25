@@ -420,7 +420,7 @@ pub trait KUtility{
   /// #[no_mangle]
   /// pub extern "C" fn print_long(atom: K) -> K{
   ///   match atom.get_long(){
-  ///     Ok(int) => {
+  ///     Ok(long) => {
   ///       println!("long: {}", long);
   ///       KNULL
   ///     },
@@ -534,7 +534,7 @@ pub trait KUtility{
   /// 
   /// #[no_mangle]
   /// pub extern "C" fn print_string(string: K) -> K{
-  ///   match atom.get_str(){
+  ///   match string.get_str(){
   ///     Ok(string_) => {
   ///       println!("string: \"{}\"", string_);
   ///       KNULL
@@ -557,7 +557,7 @@ pub trait KUtility{
   /// 
   /// #[no_mangle]
   /// pub extern "C" fn print_string2(string: K) -> K{
-  ///   match atom.get_string(){
+  ///   match string.get_string(){
   ///     Ok(string_) => {
   ///       println!("string: \"{}\"", string_);
   ///       KNULL
@@ -576,6 +576,8 @@ pub trait KUtility{
   /// Append a q list object to a q list.
   ///  Returns a pointer to the (potentially reallocated) `K` object.
   /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
   /// #[no_mangle]
   /// pub extern "C" fn concat_list2(mut list1: K, list2: K) -> K{
   ///   if let Err(err) = list1.append(list2){
@@ -605,6 +607,8 @@ pub trait KUtility{
   ///  Returns a pointer to the (potentially reallocated) `K` object.
   /// # Example
   /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
   /// #[no_mangle]
   /// pub extern "C" fn create_compound_list(int: K) -> K{
   ///   let mut list=new_simple_list(qtype::COMPOUND, 0);
@@ -635,6 +639,8 @@ pub trait KUtility{
   /// Add a raw value to a q simple list and returns a pointer to the (potentially reallocated) `K` object.
   /// # Example
   /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
   /// #[no_mangle]
   /// pub extern "C" fn create_simple_list2(_: K) -> K{
   ///   let mut list=new_simple_list(qtype::DATE, 0);
@@ -1006,10 +1012,7 @@ impl k0{
 
 /// Convert `S` to `&str`. This function is intended to convert symbol type (null-terminated char-array) to `str`.
 /// # Extern
-/// ```no_run
-/// #[macro_use]
-/// extern crate kdb_c_api;
-/// 
+/// ```no_run 
 /// use kdb_c_api::*;
 /// 
 /// #[no_mangle]
@@ -1464,6 +1467,8 @@ pub fn new_minute(minutes: I) -> K{
 ///  missing second type.
 /// # Example
 /// ```no_run
+/// use kdb_c_api::*;
+/// 
 /// #[no_mangle]
 /// pub extern "C" fn create_second(_: K) -> K{
 ///   // -02:00:00
@@ -1629,18 +1634,16 @@ pub fn new_error_os(message: &str) -> K{
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
-/// extern "C"{
-///   fn no_panick(func: K, args: K) -> K{
-///     let result=error_to_string(apply(func, args));
-///     if result.get_type() == qtype::ERROR{
-///       println!("FYI: {}", result.get_symbol().unwrap());
-///       // Decrement reference count of the error object which is no longer used.
-///       decrement_reference_count(result);
-///       KNULL
-///     }
-///     else{
-///       result
-///     }
+/// extern "C" fn no_panick(func: K, args: K) -> K{
+///   let result=error_to_string(apply(func, args));
+///   if result.get_type() == qtype::ERROR{
+///     println!("FYI: {}", result.get_symbol().unwrap());
+///     // Decrement reference count of the error object which is no longer used.
+///     decrement_reference_count(result);
+///     KNULL
+///   }
+///   else{
+///     result
 ///   }
 /// }
 /// ```
@@ -1735,8 +1738,28 @@ pub fn flip(dictionary: K) -> K{
 /// use kdb_c_api::*;
 /// 
 /// #[no_mangle]
+/// pub extern "C" fn create_table2(_: K) -> K{
+///   // Build keys
+///   let keys=new_simple_list(qtype::SYMBOL, 2);
+///   let keys_slice=keys.as_mut_slice::<S>();
+///   keys_slice[0]=internalize(str_to_S!("time"));
+///   keys_slice[1]=internalize_n(str_to_S!("temperature_and_humidity"), 11);
+///   
+///   // Build values
+///   let values=new_simple_list(qtype::COMPOUND, 2);
+///   let time=new_simple_list(qtype::TIMESTAMP, 3);
+///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+///   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+///   let temperature=new_simple_list(qtype::FLOAT, 3);
+///   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+///   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+///   
+///   flip(new_dictionary(keys, values))
+/// }
+/// 
+/// #[no_mangle]
 /// pub extern "C" fn create_keyed_table(dummy: K) -> K{
-///   enkey(create_table(dummy), 1)
+///   enkey(create_table2(dummy), 1)
 /// }
 /// 
 /// #[no_mangle]
@@ -1770,8 +1793,28 @@ pub fn unkey(keyed_table: K) -> K{
 /// use kdb_c_api::*;
 /// 
 /// #[no_mangle]
+/// pub extern "C" fn create_table2(_: K) -> K{
+///   // Build keys
+///   let keys=new_simple_list(qtype::SYMBOL, 2);
+///   let keys_slice=keys.as_mut_slice::<S>();
+///   keys_slice[0]=internalize(str_to_S!("time"));
+///   keys_slice[1]=internalize_n(str_to_S!("temperature_and_humidity"), 11);
+///   
+///   // Build values
+///   let values=new_simple_list(qtype::COMPOUND, 2);
+///   let time=new_simple_list(qtype::TIMESTAMP, 3);
+///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+///   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+///   let temperature=new_simple_list(qtype::FLOAT, 3);
+///   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+///   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+///   
+///   flip(new_dictionary(keys, values))
+/// }
+/// 
+/// #[no_mangle]
 /// pub extern "C" fn create_keyed_table(dummy: K) -> K{
-///   enkey(create_table(dummy), 1)
+///   enkey(create_table2(dummy), 1)
 /// }
 /// ```
 /// ```q
@@ -1837,7 +1880,7 @@ pub fn decrement_reference_count(qobject: K) -> V{
 ///   for _ in 0..10{
 ///     eat(apple);
 ///   }
-///   unsafe{k(0, "eat", increment_reference_count(apple), KNULL);}
+///   unsafe{native::k(0, str_to_S!("eat"), increment_reference_count(apple), KNULL);}
 ///   increment_reference_count(apple)  
 /// }
 /// ```
@@ -1907,7 +1950,7 @@ pub fn destroy_socket_if(socket: I, condition: bool){
 /// 
 /// #[no_mangle]
 /// pub extern "C" fn plumber(_: K) -> K{
-///   if 0 != unsafe{pipe(PIPE.as_mut_ptr())}{
+///   if 0 != unsafe{libc::pipe(PIPE.as_mut_ptr())}{
 ///     return new_error("Failed to create pipe\0");
 ///   }
 ///   if KNULL == register_callback(unsafe{PIPE[0]}, callback){
@@ -1973,7 +2016,7 @@ pub fn unpin_symbol() -> I{
 
 /// Convert ymd to the number of days from `2000.01.01`.
 /// # Example
-/// ```
+/// ```no_run
 /// use kdb_c_api::*;
 /// 
 /// fn main(){
@@ -1992,7 +2035,7 @@ pub fn ymd_to_days(year: I, month: I, date:I) -> I{
 
 /// Convert the number of days from `2000.01.01` to a number expressed as `yyyymmdd`.
 /// # Example
-/// ```
+/// ```no_run
 /// use kdb_c_api::*;
 /// 
 /// fn main(){
