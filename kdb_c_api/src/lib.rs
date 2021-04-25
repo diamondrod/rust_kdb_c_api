@@ -37,7 +37,7 @@
 //! pub extern "C" fn catchy(func: K, args: K) -> K{
 //!   unsafe{
 //!     let result=ee(dot(func, args));
-//!     if (*result).qtype == -qtype::ERROR{
+//!     if (*result).qtype == qtype::ERROR{
 //!       println!("error: {}", S_to_str((*result).value.symbol));
 //!       // Decrement reference count of the error object
 //!       r0(result);
