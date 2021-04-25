@@ -8,6 +8,162 @@
 //! # Note
 //! - This library is for kdb+ version >= 3.0.
 //! - Meangless C macros are excluded but accessors of an underlying array like `kC`, `kJ`, `kK` etc. are provided in Rust way.
+//! 
+//! ## Examples
+//! 
+//! The examples of using C API wrapper are included in `c_api_examples` folder. The examples are mirroring the examples in the document of `kdb_c_api` library and the functions are also used for simple tests of the library. The test is conducted in the `test.q` under `tests/` by loading the functions defined in a shared library built from the examples.
+//! 
+//! Here are some examples:
+//! 
+//! ### C API Style
+//! 
+//! ```rust
+//! use kdb_c_api::*;
+//! use kdb_c_api::native::*;
+//! 
+//! #[no_mangle]
+//! pub extern "C" fn create_symbol_list(_: K) -> K{
+//!   unsafe{
+//!     let mut list=ktn(qtype::SYMBOL as i32, 0);
+//!     js(&mut list, ss(str_to_S!("Abraham")));
+//!     js(&mut list, ss(str_to_S!("Isaac")));
+//!     js(&mut list, ss(str_to_S!("Jacob")));
+//!     js(&mut list, sn(str_to_S!("Josephine"), 6));
+//!     list
+//!   }
+//! }
+//!  
+//! #[no_mangle]
+//! pub extern "C" fn catchy(func: K, args: K) -> K{
+//!   unsafe{
+//!     let result=ee(dot(func, args));
+//!     if (*result).qtype == -qtype::ERROR{
+//!       println!("error: {}", S_to_str((*result).value.symbol));
+//!       // Decrement reference count of the error object
+//!       r0(result);
+//!       KNULL
+//!     }
+//!     else{
+//!       result
+//!     }
+//!   }
+//! }
+//! 
+//! #[no_mangle]
+//! pub extern "C" fn dictionary_list_to_table() -> K{
+//!   unsafe{
+//!     let dicts=knk(3);
+//!     let dicts_slice=dicts.as_mut_slice::<K>();
+//!     for i in 0..3{
+//!       let keys=ktn(qtype::SYMBOL as i32, 2);
+//!       let keys_slice=keys.as_mut_slice::<S>();
+//!       keys_slice[0]=ss(str_to_S!("a"));
+//!       keys_slice[1]=ss(str_to_S!("b"));
+//!       let values=ktn(qtype::INT as i32, 2);
+//!       values.as_mut_slice::<I>()[0..2].copy_from_slice(&[i*10, i*100]);
+//!       dicts_slice[i as usize]=xD(keys, values);
+//!     }
+//!     // Format list of dictionary as a table.
+//!     // ([] a: 0 10 20i; b: 0 100 200i)
+//!     k(0, str_to_S!("{[dicts] -1 _ dicts, (::)}"), dicts, KNULL)
+//!   } 
+//! }
+//! ```
+//! 
+//! q can use these functions like this:
+//! 
+//! ```q
+//! q)summon:`libc_api_examples 2: (`create_symbol_list; 1)
+//! q)summon[]
+//! `Abraham`Isaac`Jacob`Joseph
+//! q)`Abraham`Isaac`Jacob`Joseph ~ summon[]
+//! q)catchy: `libc_api_examples 2: (`catchy; 2);
+//! q)catchy[$; ("J"; "42")]
+//! 42
+//! q)catchy[+; (1; `a)]
+//! error: type
+//! q)unfortunate_fact: `libc_api_examples 2: (`dictionary_list_to_table; 1);
+//! q)unfortunate_fact[]
+//! a  b  
+//! ------
+//! 0  0  
+//! 10 100
+//! 20 200
+//! ```
+//! 
+//! ### Rust Style
+//! 
+//! The examples below are written without `unsafe` code. You can see how comfortably breathing are the wrapped functions in the code.
+//! 
+//! ```rust
+//! use kdb_c_api::*;
+//! 
+//! #[no_mangle]
+//! pub extern "C" fn create_symbol_list2(_: K) -> K{
+//!   let mut list=new_simple_list(qtype::SYMBOL, 0);
+//!   list.push_symbol("Abraham").unwrap();
+//!   list.push_symbol("Isaac").unwrap();
+//!   list.push_symbol("Jacob").unwrap();
+//!   list.push_symbol_n("Josephine", 6).unwrap();
+//!   list
+//! }
+//! 
+//! #[no_mangle]
+//! fn no_panick(func: K, args: K) -> K{
+//!   let result=error_to_string(apply(func, args));
+//!   if result.get_type() == qtype::ERROR{
+//!     println!("FYI: {}", result.get_symbol().unwrap());
+//!     // Decrement reference count of the error object which is no longer used.
+//!     decrement_reference_count(result);
+//!     KNULL
+//!   }
+//!   else{
+//!     println!("success!");
+//!     result
+//!   }
+//! }
+//! 
+//! #[no_mangle]
+//! pub extern "C" fn create_table2(_: K) -> K{
+//!   // Build keys
+//!   let keys=new_simple_list(qtype::SYMBOL, 2);
+//!   let keys_slice=keys.as_mut_slice::<S>();
+//!   keys_slice[0]=internalize(str_to_S!("time"));
+//!   keys_slice[1]=internalize_n(str_to_S!("temperature_and_humidity"), 11);
+//! 
+//!   // Build values
+//!   let values=new_simple_list(qtype::COMPOUND, 2);
+//!   let time=new_simple_list(qtype::TIMESTAMP, 3);
+//!   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
+//!   time.as_mut_slice::<J>().copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+//!   let temperature=new_simple_list(qtype::FLOAT, 3);
+//!   temperature.as_mut_slice::<F>().copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+//!   values.as_mut_slice::<K>().copy_from_slice(&[time, temperature]);
+//!   
+//!   flip(new_dictionary(keys, values))
+//! }
+//! ```
+//! 
+//! And q code is here:
+//! 
+//! ```q
+//! q)summon:`libc_api_examples 2: (`create_symbol_list2; 1)
+//! q)summon[]
+//! `Abraham`Isaac`Jacob`Joseph
+//! q)chill: `libc_api_examples 2: (`no_panick; 2);
+//! q)chill[$; ("J"; "42")]
+//! success!
+//! 42
+//! q)chill[+; (1; `a)]
+//! FYI: type
+//! q)climate_change: libc_api_examples 2: (`create_table2; 1);
+//! q)climate_change[]
+//! time                          temperature
+//! -----------------------------------------
+//! 2003.10.10D02:24:19.167018272 22.1       
+//! 2006.05.24D06:16:49.419710368 24.7       
+//! 2008.08.12D23:12:24.018691392 30.5  
+//! ```
 
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]

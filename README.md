@@ -24,7 +24,6 @@ Here are some examples:
 ### C API Style
 
 ```rust
-
 use kdb_c_api::*;
 use kdb_c_api::native::*;
 
@@ -75,13 +74,11 @@ pub extern "C" fn dictionary_list_to_table() -> K{
     k(0, str_to_S!("{[dicts] -1 _ dicts, (::)}"), dicts, KNULL)
   } 
 }
-
 ```
 
 q can use these functions like this:
 
 ```q
-
 q)summon:`libc_api_examples 2: (`create_symbol_list; 1)
 q)summon[]
 `Abraham`Isaac`Jacob`Joseph
@@ -98,15 +95,13 @@ a  b
 0  0  
 10 100
 20 200
-
 ```
 
 ### Rust Style
 
 The examples below are written without `unsafe` code. You can see how comfortably breathing are the wrapped functions in the code.
 
-```Rust
-
+```rust
 use kdb_c_api::*;
 
 #[no_mangle]
@@ -153,13 +148,11 @@ pub extern "C" fn create_table2(_: K) -> K{
   
   flip(new_dictionary(keys, values))
 }
-
 ```
 
 And q code is here:
 
 ```q
-
 q)summon:`libc_api_examples 2: (`create_symbol_list2; 1)
 q)summon[]
 `Abraham`Isaac`Jacob`Joseph
@@ -176,7 +169,6 @@ time                          temperature
 2003.10.10D02:24:19.167018272 22.1       
 2006.05.24D06:16:49.419710368 24.7       
 2008.08.12D23:12:24.018691392 30.5  
-
 ```
 
 ## Test
