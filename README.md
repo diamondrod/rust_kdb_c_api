@@ -126,7 +126,7 @@ fn no_panick(func: K, args: K) -> K{
     println!("FYI: {}", result.get_symbol().unwrap());
     // Decrement reference count of the error object which is no longer used.
     decrement_reference_count(result);
-    return KNULL;
+    KNULL
   }
   else{
     println!("success!");
@@ -228,7 +228,7 @@ FYI: type
 おいしい！
 おいしい！
 "Collect the clutter of apples!"
-test result: ok. 107 passed; 0 failed
+test result: ok. 109 passed; 0 failed
 What are the three largest elements?: `belief`love`hope
 q)
 

@@ -754,7 +754,7 @@ fn no_panick(func: K, args: K) -> K{
     println!("FYI: {}", result.get_symbol().unwrap());
     // Decrement reference count of the error object which is no longer used.
     decrement_reference_count(result);
-    return KNULL;
+    KNULL
   }
   else{
     println!("success!");

@@ -1636,7 +1636,7 @@ pub fn new_error_os(message: &str) -> K{
 ///       println!("FYI: {}", result.get_symbol().unwrap());
 ///       // Decrement reference count of the error object which is no longer used.
 ///       decrement_reference_count(result);
-///       return KNULL;
+///       KNULL
 ///     }
 ///     else{
 ///       result

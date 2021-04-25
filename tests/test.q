@@ -108,11 +108,11 @@ LIBPATH_: `libc_api_examples 2:
 // dj
 .capi.days_to_date: LIBPATH_ (`days_to_date; 1);
 // q_ipc_decode
-.capi.decrypto: LIBPATH_ (`decrypt; 1);
+.capi.decrypt: LIBPATH_ (`decrypt; 1);
 // k
 .capi.dictionary_list_to_table: LIBPATH_ (`dictionary_list_to_table; 1);
 // q_ipc_encode
-.capi.encrypto: LIBPATH_ (`encrypt; 1);
+.capi.encrypt: LIBPATH_ (`encrypt; 1);
 // r0
 .capi.idle_man: LIBPATH_ (`idle_man; 1);
 // new_error
