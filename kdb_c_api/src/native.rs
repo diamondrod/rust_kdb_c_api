@@ -1,3 +1,14 @@
+//! This module exposes bare C API functions. As most of them are provided with a "safe" wrapper
+//!  function with an intuitive name and intuitive implementation for Rust, there is no gain to
+//!  darely use these functions.
+//! 
+//! The only exceptions are `k` and `knk` which are not provided with a "safe" wrapper because
+//!  these functions are using elipsis (`...`) as their argument.
+
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+//                            Load Libraries                            //
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
 use super::{S, const_S, U, I, J, F, V, K};
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
@@ -193,7 +204,7 @@ extern "C"{
   /// ```
   pub fn ks(symbol: S) -> K;
 
-  /// Constructor of q timestamp or timespan object.
+  /// Constructor of q timestamp from elapsed time in nanoseconds since kdb+ epoch (`2000.01.01`) or timespan object from nanoseconds.
   /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
@@ -239,7 +250,7 @@ extern "C"{
   /// ```
   pub fn kd(date: I) -> K;
 
-  /// Constructor of q datetime object.
+  /// Constructor of q datetime object from the number of days since kdb+ epoch (`2000.01.01`).
   /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
@@ -457,10 +468,7 @@ extern "C"{
   /// Similar to krr but this function appends a system-error message to string S before passing it to `krr`.
   pub fn orr(message: const_S) -> K;
 
-  /// Add a raw value to a q simple list.
-  ///  `list` points to a `K` object, which may be reallocated during the function.
-  ///  The contents of `list`, i.e. `*list`, will be updated in case of reallocation. 
-  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// Add a raw value to a q simple list and returns a pointer to the (potentially reallocated) `K` object.
   /// # Example
   /// ```no_run
   /// use kdb_c_api::*;
@@ -476,7 +484,7 @@ extern "C"{
   ///   list
   /// }
   /// ```
-  ///  # Note
+  /// # Note
   /// For symbol list, use [`js`](#fn.js).
   pub fn ja(list: *mut K, value: *mut V) -> K;
 
@@ -535,14 +543,13 @@ extern "C"{
   /// "3rd"
   /// ```
   /// # Note
-  /// In this example we intentionally not allocated an array by `knk(0)` to use `jk` to make it grow.
-  ///  When using `jk`, it accesses current value of `n` in `K`, so preallocating memory with `knk` and
-  ///  then using `jk` will crash because `knk` initializes `n` with its argument. If you want to allocate
-  ///  a memory in advance, use `knk` and then substitute a value after converting the `K` into a slice
-  ///  with `as_mut_K_slice`.
+  /// In this example we did not allocate an array as `knk(0)` to use `jk`. As `knk` initializes the
+  ///  internal list size `n` with its argument, preallocating memory with `knk` and then using `jk` will crash.
+  ///  If you want to allocate a memory in advance, you can substitute a value after converting
+  ///  the q list object into a slice with [`as_mut_slice`](../trait.KUtility.html#tymethod.as_mut_slice).
   pub fn jk(list: *mut K, value: K) -> K;
 
-  /// Add an internalized char array to symbol list.
+  /// Add an internalized char array to a symbol list.
   ///  Returns a pointer to the (potentially reallocated) `K` object.
   /// # Example
   /// ```no_run
@@ -569,11 +576,10 @@ extern "C"{
   /// 1b
   /// ```
   /// # Note
-  /// In this example we intentionally not allocated an array by `ktn(qtype::SYMBOL as I, 0)` to use `js`
-  ///  to make it grow. When using `js`, it accesses current value of `n` in `K`, so preallocating memory
-  ///  with `ktn` and then using `js` will crash because `ktn` initializes `n` with its argument. If you want
-  ///  to allocate a memory in advance, use `ktn` and then substitute a value after converting the `K` into a
-  ///  slice with `as_mut_symbol_slice`.
+  /// In this example we did not allocate an array as `ktn(qtype::SYMBOL as I, 0)` to use `js`. As `ktn` initializes
+  ///  the internal list size `n` with its argument, preallocating memory with `ktn` and then using `js` will crash.
+  ///  If you want to allocate a memory in advance, you can substitute a value after converting the q list object
+  ///  into a slice with [`as_mut_slice`](../trait.KUtility.html#tymethod.as_mut_slice).
   pub fn js(list: *mut K, symbol: S) -> K;
 
   /// Intern `n` chars from a char array.
@@ -623,7 +629,7 @@ extern "C"{
   //%% IPC Functions %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
   /// Send a text query or evaluate the text query in a process which are loading the shared library.
-  ///  As this library is purposed to build shared object, the only choice of `handle` is `0`. This
+  ///  As this library is purposed to build shared object, the only choice of `socket` is `0`. This
   ///  executes against the kdb+ process in which it is loaded.
   /// ```
   /// use kdb_c_api::*;
@@ -656,7 +662,7 @@ extern "C"{
   /// 10 100
   /// 20 200
   /// ```
-  pub fn k(handle: I, query: const_S,...) -> K;
+  pub fn k(socket: I, query: const_S,...) -> K;
 
   /// Serialize q object and return serialized q byte list object on success: otherwise null. 
   ///  Mode is either of:
@@ -664,29 +670,61 @@ extern "C"{
   /// - 1: retain enumerations, allow serialization of timespan and timestamp: Useful for passing data between threads
   /// - 2: unenumerate, allow serialization of timespan and timestamp
   /// - 3: unenumerate, compress, allow serialization of timespan and timestamp
-  /// # Note
-  /// Probably not used.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// use kdb_c_api::native::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn conceal(object: K)->K{
+  ///   unsafe{b9(3, object)}
+  /// }
+  /// ```
+  /// ```q
+  /// q)jamming: `libc_api_examples 2: (`conceal; 1);
+  /// q)jamming til 3
+  /// 0x0100000026000000070003000000000000000000000001000000000000000200000000000000
+  /// q)-9!jamming "Look! HE has come!!"
+  /// "Look! HE has come!!"
+  /// ```
   pub fn b9(mode: I, qobject: K) -> K;
 
   /// Deserialize a bytes into q object.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// use kdb_c_api::native::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn reveal(bytes: K)->K{
+  ///   unsafe{d9(bytes)}
+  /// }
+  /// ```
+  /// ```q
+  /// q)cancelling: `libc_api_examples 2: (`reveal; 1);
+  /// q)cancelling -8!(`contact`from; "space"; 12);
+  /// `contact`from
+  /// "space"
+  /// 12
+  /// ```
   /// # Note
-  /// - On success, returns deserialized `K` object. On error, `(K) 0` is returned; use [`ee`](#fn.ee) to retrieve the error string.
-  /// - Probably not used.
+  /// On success, returns deserialized `K` object. On error, `(K) 0` is returned; use [`ee`](#fn.ee) to retrieve the error string.
+  /// 
   pub fn d9(bytes: K) -> K;
 
-  /// Remove callback from the associated kdb+ handle and call `kclose`.
-  ///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+  /// Remove callback from the associated kdb+ socket and call `kclose`.
+  ///  Return null if the socket is invalid or not the one which had been registered by `sd1`.
   /// # Note
   /// A function which calls this function must be executed at the exit of the process.
-  pub fn sd0(handle: I) -> V;
+  pub fn sd0(socket: I) -> V;
 
-  /// Remove callback from the associated kdb+ handle and call `kclose` if the given condition is satisfied.
-  ///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+  /// Remove callback from the associated kdb+ socket and call `kclose` if the given condition is satisfied.
+  ///  Return null if the socket is invalid or not the one which had been registered by `sd1`.
   /// # Note
   /// A function which calls this function must be executed at the exit of the process.
-  pub fn sd0x(handle: I, condition: I) -> V;
+  pub fn sd0x(socket: I, condition: I) -> V;
 
-  /// Register callback to the associated kdb+ handle.
+  /// Register callback to the associated kdb+ socket.
   /// ```no_run
   /// use kdb_c_api::*;
   /// use kdb_c_api::native::*;
@@ -752,7 +790,7 @@ extern "C"{
   /// q)neg[h] "1+2"
   /// `Counter_punch!!
   /// ```
-  pub fn sd1(handle: I, function: extern fn(I) -> K) -> K;
+  pub fn sd1(socket: I, function: extern fn(I) -> K) -> K;
 
   //%% Reference Count %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
@@ -765,7 +803,7 @@ extern "C"{
   /// use kdb_c_api::native::*;
   /// 
   /// #[no_mangle]
-  /// pub ectern "C" fn idle_man(_: K)->K{
+  /// pub extern "C" fn idle_man(_: K)->K{
   ///   unsafe{
   ///     // Creare an int object.
   ///     let int=ki(777);
@@ -884,7 +922,7 @@ extern "C"{
   /// ```
   pub fn setm(lock: I) -> I;
 
-  /// Convert ymd to days from `2000.01.01`.
+  /// Convert ymd to the number of days from `2000.01.01`.
   /// # Example
   /// ```
   /// use kdb_c_api::*;
@@ -943,10 +981,10 @@ extern "C"{
   /// Connect anonymously.
   pub fn khp(host: const_S, port: I) -> I;
 
-  /// Close the handle to a q process.
+  /// Close the socket to a q process.
   /// # Note
   /// Standalone application only. Not for a shared library.
-  pub fn kclose(handle: I) -> V;
+  pub fn kclose(socket: I) -> V;
 
   /// Verify that the received bytes is a valid IPC message.
   ///  The message is not modified.

@@ -132,14 +132,15 @@ pub const KNULL:K=0 as K;
 /// use kdb_c_api::*;
 /// 
 /// #[no_mangle]
-/// pub extern "C" fn bigbang(_: K) -> K{
-///   unsafe{native::ks(str_to_S!("super_illusion"))}
+/// pub extern "C" fn pingpong(_: K) -> K{
+///   unsafe{native::k(0, str_to_S!("ping"), new_int(77), KNULL)}
 /// }
 /// ```
 /// ```q
-/// q)bigbang: `libc_api_examples 2: (`bigbang; 1);
-/// q)bigbang[]
-/// `super_illusion
+/// q)ping:{[int] `$string[int], "_pong!!"}
+/// q)pingpong: `libc_api_examples 2: (`pingpong; 1);
+/// q)pingpong[]
+/// `77_pong!!
 /// ```
 /// # Note
 /// This macro cannot be created as a function due to freeing resource of Rust (not sure).
@@ -189,17 +190,24 @@ pub struct U{
 //%% K %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
 /// Underlying list value of q object.
+/// # Note
+/// Usually this struct does not need to be accessed this struct directly unless user wants to
+///  access via a raw pointer for non-trivial stuff. 
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct k0_list_info{
   /// Length of the list.
   pub n: J,
   /// Pointer referring to the head of the list. This pointer will be interpreted
-  ///  as various types when accessing `K` object to edit the list.
+  ///  as various types when accessing `K` object to edit the list with
+  ///  [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice).
   pub G0: [G; 1]
 }
 
 /// Underlying atom value of q object.
+/// # Note
+/// Usually this struct does not need to be accessed directly unless user wants to
+///  access via a raw pointer for non-trivial stuff. 
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub union k0_inner{
@@ -266,7 +274,7 @@ pub trait KUtility{
   ///   if long_list.len() >= 2{
   ///     // Derefer as a mutable i64 slice.
   ///     long_list.as_mut_slice::<J>()[1]=30000_i64;
-  ///     // Increment the counter for reuse on q side.
+  ///     // Increment the counter to reuse on q side.
   ///     increment_reference_count(long_list)
   ///   }
   ///   else{
@@ -618,17 +626,13 @@ pub trait KUtility{
   /// 5i
   /// ```
   /// # Note
-  /// In this example we intentionally not allocated an array by `knk(0)` to use `push` to make it grow.
-  ///  When using `push`, it accesses current value of `n` in `K`, so preallocating memory with `knk` and
-  ///  then using `push` will crash because `knk` initializes `n` with its argument. If you want to allocate
-  ///  a memory in advance, use `knk` and then substitute a value after converting the `K` into a slice
-  ///  with `as_mut_K_slice`.
+  /// In this example we did not allocate an array as `new_simple_list(qtype::COMPOUND, 0)` to use `push`.
+  ///  As `new_simple_list` initializes the internal list size `n` with its argument, preallocating memory with `new_simple_list` and
+  ///  then using `push` will crash. If you want to allocate a memory in advance, you can substitute a value
+  ///  after converting the q list object into a slice with [`as_mut_slice`](rait.KUtility.html#tymethod.as_mut_slice).
   fn push(&mut self, atom: K)->Result<K, &'static str>;
 
-  /// Add a raw value to a q simple list.
-  ///  `list` points to a `K` object, which may be reallocated during the function.
-  ///  The contents of `list`, i.e. `*list`, will be updated in case of reallocation. 
-  ///  Returns a pointer to the (potentially reallocated) `K` object.
+  /// Add a raw value to a q simple list and returns a pointer to the (potentially reallocated) `K` object.
   /// # Example
   /// ```no_run
   /// #[no_mangle]
@@ -675,11 +679,10 @@ pub trait KUtility{
   /// 1b
   /// ```
   /// # Note
-  /// In this example we intentionally not allocated an array by `ktn(qtype::SYMBOL as I, 0)` to use `js`
-  ///  to make it grow. When using `js`, it accesses current value of `n` in `K`, so preallocating memory
-  ///  with `ktn` and then using `js` will crash because `ktn` initializes `n` with its argument. If you want
-  ///  to allocate a memory in advance, use `ktn` and then substitute a value after converting the `K` into a
-  ///  slice with `as_mut_symbol_slice`.
+  /// In this example we did not allocate an array as `new_simple_list(qtype::SYMBOL as I, 0)` to use `push_symbol`.
+  ///  As `new_simple_list` initializes the internal list size `n` with its argument, preallocating memory with `new_simple_list`
+  ///  and then using `push_symbol` will crash. If you want to allocate a memory in advance, you can substitute a value
+  ///  after converting the q list object into a slice with [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice).
   fn push_symbol(&mut self, symbol: &str)->Result<K, &'static str>;
 
   /// Add an internalized char array to symbol list.
@@ -716,7 +719,10 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// 
+  /// q)disguise: `libc_api_examples 2: (`encrypt; 1);
+  /// q)list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
+  /// q)disguise list
+  /// 0x010000004600000000000400000007000300000000000000000000000100000000000000020..
   /// ```
   fn q_ipc_encode(&self, mode: I) -> Result<K, &'static str>;
 
@@ -726,12 +732,17 @@ pub trait KUtility{
   /// use kdb_c_api::*;
   /// 
   /// #[no_mangle]
-  /// pub extern "C" fn decrypto(bytes: K)->K{
-  ///   match bytes.q_ipc_encode(){
+  /// pub extern "C" fn decrypt(bytes: K)->K{
+  ///   match bytes.q_ipc_decode(){
   ///     Ok(object) => object,
   ///     Err(error) => new_error(error)
   ///   }
   /// }
+  /// ```
+  /// ```q
+  /// q)uncover: `libc_api_examples 2: (`decrypt; 1);
+  /// q)uncover -8!"What is the purpose of CREATION?"
+  /// "What is the purpose of CREATION?"
   /// ```
   fn q_ipc_decode(&self) -> Result<K, &'static str>;
 }
@@ -973,12 +984,12 @@ impl KUtility for K{
 }
 
 impl k0{
-  /// Derefer `k0` as a mutable slice. For supported types, see [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice)
+  /// Derefer `k0` as a mutable slice. For supported types, see [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice).
   /// # Note
   /// Used if `K` needs to be sent to another thread. `K` cannot implement `Send` and therefore
-  ///  its inner struct must besent instead.
+  ///  its inner struct must be sent instead.
   /// # Example
-  /// See the example of [`setm`](fn.setm.html).
+  /// See the example of [`setm`](native/fn.setm.html).
   #[inline]
   pub fn as_mut_slice<'a, T>(&mut self) -> &'a mut[T]{
     unsafe{
@@ -1025,20 +1036,21 @@ pub fn S_to_str<'a>(cstring: S) -> &'a str{
   }
 }
 
-/// Convert `&str` to `S`.
+/// Convert null-terminated `&str` to `S`.
 /// # Example
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
 /// #[no_mangle]
-/// pub extern "C" fn bigbang2(_: K) -> K{
-///   unsafe{ks(null_terminated_str_to_S("super_illusion\0"))}
+/// pub extern "C" fn pingpong2(_: K) -> K{
+///   unsafe{native::k(0, null_terminated_str_to_S("ping\0"), new_int(77), KNULL)}
 /// }
 /// ```
 /// ```q
-/// q)bigbang: `libc_api_examples 2: (`bigbang2; 1);
-/// q)bigbang[]
-/// `super_illusion
+/// q)ping:{[int] `$string[int], "_pong!!"};
+/// q)pingpong: `libc_api_examples 2: (`pingpong2; 1);
+/// q)pingpong[]
+/// `77_pong!!
 /// ```
 #[inline]
 pub fn null_terminated_str_to_S(string: &str) -> S {
@@ -1048,13 +1060,11 @@ pub fn null_terminated_str_to_S(string: &str) -> S {
 }
 
 /// Convert null terminated `&str` into `const_S`. Expected usage is to build
-///  a q error with `krr`.
+///  a q error object with `krr`.
 /// # Example
-/// ```
-/// #[macro_use]
-/// extern crate kdb_c_api;
-/// 
+/// ```no_run
 /// use kdb_c_api::*;
+/// use kdb_c_api::native::*;
 /// 
 /// pub extern "C" fn must_be_int2(obj: K) -> K{
 ///   unsafe{
@@ -1309,7 +1319,7 @@ pub fn new_symbol(symbol: &str) -> K{
   }
 }
 
-/// Constructor of q timestamp or timespan object. Relabeling of `ktj`.
+/// Constructor of q timestamp from elapsed time in nanoseconds since kdb+ epoch (`2000.01.01`). Relabeling of `ktj`.
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
@@ -1331,8 +1341,8 @@ pub fn new_timestamp(nanoseconds: J) -> K{
   }
 }
 
-/// Create a month object. This is a complememtal constructor of
-///  missing month type.
+/// Create a month object from the number of months since kdb+ epoch (`2000.01.01`).
+///  This is a complememtal constructor of missing month type.
 /// # Example
 /// ```no_run
 /// use kdb_c_api::*;
@@ -1380,7 +1390,7 @@ pub fn new_date(days: I) -> K{
   }
 }
 
-/// Constructor of q datetime object. Relabeling of `kz`.
+/// Constructor of q datetime object from the number of days since kdb+ epoch (`2000.01.01`). Relabeling of `kz`.
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
@@ -1402,7 +1412,7 @@ pub fn new_datetime(days: F) -> K{
   }
 }
 
-/// Constructor of q timestamp or timespan object. Relabeling of `ktj`.
+/// Constructor of q timespan object from nanoseconds. Relabeling of `ktj`.
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
@@ -1536,7 +1546,7 @@ pub fn new_string(string: &str) -> K{
 /// 
 /// #[no_mangle]
 /// pub extern "C" fn create_string2(_: K) -> K{
-///   unsafe{kpn(str_to_S!("The meeting was too long and I felt it s..."), 24)}
+///   new_string_n("The meeting was too long and I felt it s...", 24)
 /// }
 /// ```
 /// ```q
@@ -1614,7 +1624,7 @@ pub fn new_error_os(message: &str) -> K{
   }
 }
 
-/// Convert error object into usual K object which has the error string in the field `s`.
+/// Convert an error object into usual K object which has the error string in the field `s`.
 /// # Example
 /// ```no_run
 /// use kdb_c_api::*;
@@ -1675,7 +1685,7 @@ pub fn internalize(string: S) -> S{
 
 //%% Table %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
-// Constructor of q table object from q dictionary object.
+/// Constructor of q table object from a q dictionary object.
 /// # Note
 /// Basically this is a `flip` command of q. Hence the value of the dictionary must have
 ///  lists as its elements.
@@ -1719,7 +1729,7 @@ pub fn flip(dictionary: K) -> K{
   }
 }
 
-/// Constructor of simple q table object from q keyed table object.
+/// Constructor of simple q table object from a q keyed table object.
 /// # Example
 /// ```no_run
 /// use kdb_c_api::*;
@@ -1752,6 +1762,9 @@ pub fn unkey(keyed_table: K) -> K{
 }
 
 /// Constructor of q keyed table object.
+/// # Parameters
+/// - `table`: q table object to be enkeyed.
+/// - `n`: The number of key columns from the left.
 /// # Example
 /// ```no_run
 /// use kdb_c_api::*;
@@ -1809,7 +1822,7 @@ pub fn decrement_reference_count(qobject: K) -> V{
 
 /// Increment reference count of the q object. Increment must be done when you passed arguments
 ///  to Rust function and intends to return it to q side or when you pass some `K` objects to `k`
-///  function and intend to use the parameter after the call.
+///  function and intend to use the argument after the call.
 ///  See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
 /// # Example
 /// ```no_run
@@ -1852,7 +1865,7 @@ pub fn increment_reference_count(qobject: K) -> K{
 //%% Callback %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
 /// Remove callback from the associated kdb+ socket and call `kclose`.
-///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+///  Return null if the socket is invalid or not the one which had been registered by `sd1`.
 /// # Note
 /// A function which calls this function must be executed at the exit of the process.
 #[inline]
@@ -1862,8 +1875,8 @@ pub fn destroy_socket(socket: I){
   }
 }
 
-/// Remove callback from the associated kdb+ handle and call `kclose` if the given condition is satisfied.
-///  Return null if the handle is invalid or not the one which had been registered by `sd1`.
+/// Remove callback from the associated kdb+ socket and call `kclose` if the given condition is satisfied.
+///  Return null if the socket is invalid or not the one which had been registered by `sd1`.
 /// # Note
 /// A function which calls this function must be executed at the exit of the process.
 #[inline]
@@ -1873,7 +1886,7 @@ pub fn destroy_socket_if(socket: I, condition: bool){
   }
 }
 
-/// Register callback to the associated kdb+ handle.
+/// Register callback to the associated kdb+ socket.
 /// ```no_run
 /// use kdb_c_api::*;
 /// 
@@ -1883,6 +1896,7 @@ pub fn destroy_socket_if(socket: I, condition: bool){
 /// extern "C" fn callback(socket: I)->K{
 ///   let mut buffer: [K; 1]=[0 as K];
 ///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
+///   // Call `shout` function on q side with the received data.
 ///   let result=error_to_string(unsafe{native::k(0, str_to_S!("shout"), buffer[0], KNULL)});
 ///   if result.get_type() == qtype::ERROR{
 ///     eprintln!("Execution error: {}", result.get_symbol().unwrap());
@@ -1897,7 +1911,7 @@ pub fn destroy_socket_if(socket: I, condition: bool){
 ///     return new_error("Failed to create pipe\0");
 ///   }
 ///   if KNULL == register_callback(unsafe{PIPE[0]}, callback){
-///     return new_error("Failed to ergister callback\0");
+///     return new_error("Failed to register callback\0");
 ///   }
 ///   // Lock symbol in a worker thread.
 ///   pin_symbol();
@@ -1930,7 +1944,7 @@ pub fn register_callback(socket: I, function: extern fn(I) -> K) -> K{
 
 /// Apply a function to q list object `.[func; args]`.
 /// # Example
-/// See the example of [`error_to_string`](fn.error_to_string).
+/// See the example of [`error_to_string`](fn.error_to_string.html).
 #[inline]
 pub fn apply(func: K, args: K) -> K{
   unsafe{native::dot(func, args)}
@@ -1939,7 +1953,7 @@ pub fn apply(func: K, args: K) -> K{
 /// Lock a location of internalized symbol in remote threads.
 ///  Returns the previously set value.
 /// # Example
-/// See the example of [`register_callback`](fn.register_callback).
+/// See the example of [`register_callback`](fn.register_callback.html).
 #[inline]
 pub fn pin_symbol() -> I{
   unsafe{
@@ -1949,7 +1963,7 @@ pub fn pin_symbol() -> I{
 
 /// Unlock a location of internalized symbol in remote threads. 
 /// # Example
-/// See the example of [`register_callback`](fn.register_callback).
+/// See the example of [`register_callback`](fn.register_callback.html).
 #[inline]
 pub fn unpin_symbol() -> I{
   unsafe{
@@ -1957,7 +1971,7 @@ pub fn unpin_symbol() -> I{
   }
 }
 
-/// Convert ymd to days from `2000.01.01`.
+/// Convert ymd to the number of days from `2000.01.01`.
 /// # Example
 /// ```
 /// use kdb_c_api::*;
@@ -1969,13 +1983,14 @@ pub fn unpin_symbol() -> I{
 /// 
 /// }
 /// ```
+#[inline]
 pub fn ymd_to_days(year: I, month: I, date:I) -> I{
   unsafe{
     native::ymd(year, month, date)
   }
 }
 
-/// Convert days from `2000.01.01` to a number expressed as `yyyymmdd`.
+/// Convert the number of days from `2000.01.01` to a number expressed as `yyyymmdd`.
 /// # Example
 /// ```
 /// use kdb_c_api::*;
@@ -1987,6 +2002,7 @@ pub fn ymd_to_days(year: I, month: I, date:I) -> I{
 /// 
 /// }
 /// ```
+#[inline]
 pub fn days_to_ymd(days: I) -> I{
   unsafe{
     native::dj(days)

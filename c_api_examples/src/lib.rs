@@ -31,9 +31,9 @@ pub extern "C" fn vanity(_: K) -> K{
 
 /// Example of `str_to_S`.
 #[no_mangle]
-pub extern "C" fn bigbang(_: K) -> K{
+pub extern "C" fn pingpong(_: K) -> K{
   unsafe{
-    ks(str_to_S!("super_illusion"))
+    native::k(0, str_to_S!("ping"), new_int(77), KNULL)
   }
 }
 
@@ -256,7 +256,7 @@ pub extern "C" fn create_symbol_list2(_: K) -> K{
 
 /// Example of `q_ipc_decode`.
 #[no_mangle]
-pub extern "C" fn encrypto(object: K)->K{
+pub extern "C" fn encrypt(object: K)->K{
   match object.q_ipc_encode(3){
     Ok(bytes) => bytes,
     Err(error) => new_error(error)
@@ -265,7 +265,7 @@ pub extern "C" fn encrypto(object: K)->K{
 
 /// Example of `q_ipc_encode`.
 #[no_mangle]
-pub extern "C" fn decrypto(bytes: K)->K{
+pub extern "C" fn decrypt(bytes: K)->K{
   match bytes.q_ipc_decode(){
     Ok(object) => object,
     Err(error) => new_error(error)
@@ -528,6 +528,18 @@ pub extern "C" fn dictionary_list_to_table() -> K{
   unsafe{k(0, str_to_S!("{[dicts] -1 _ dicts, (::)}"), dicts, KNULL)} 
 }
 
+/// Example of `b9`.
+#[no_mangle]
+pub extern "C" fn conceal(object: K)->K{
+  unsafe{b9(3, object)}
+}
+
+/// Example of `d9`.
+#[no_mangle]
+pub extern "C" fn reveal(bytes: K)->K{
+  unsafe{d9(bytes)}
+}
+
 /// Callback function to send asynchronous query to a q process which sent a query to the
 ///  caller of this function.
 extern "C" fn counter(socket: I) -> K{
@@ -675,9 +687,9 @@ pub extern "C" fn print_symbol(symbol: K) -> K{
 
 /// Example of `null_terminated_str_to_S`.
 #[no_mangle]
-pub extern "C" fn bigbang2(_: K) -> K{
+pub extern "C" fn pingpong2(_: K) -> K{
   unsafe{
-    ks(null_terminated_str_to_S("super_illusion\0"))
+    native::k(0, null_terminated_str_to_S("ping\0"), new_int(77), KNULL)
   }
 }
 
@@ -813,6 +825,7 @@ static mut PIPE:[I; 2]=[-1, -1];
 extern "C" fn callback(socket: I)->K{
   let mut buffer: [K; 1]=[0 as K];
   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
+  // Call `shout` function on q side with the received data.
   let result=error_to_string(unsafe{native::k(0, str_to_S!("shout"), buffer[0], KNULL)});
   if result.get_type() == qtype::ERROR{
     eprintln!("Execution error: {}", result.get_symbol().unwrap());
@@ -827,7 +840,7 @@ pub extern "C" fn plumber(_: K) -> K{
     return new_error("Failed to create pipe\0");
   }
   if KNULL ==register_callback(unsafe{PIPE[0]}, callback){
-    return new_error("Failed to ergister callback\0");
+    return new_error("Failed to register callback\0");
   }
   // Lock symbol in a worker thread.
   pin_symbol();

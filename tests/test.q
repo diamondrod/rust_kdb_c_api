@@ -25,14 +25,12 @@ LIBPATH_: `libc_api_examples 2:
 
 // decrement_reference_count
 .capi.agriculture: LIBPATH_ (`agriculture; 1);
-// str_to_S
-.capi.bigbang: LIBPATH_ (`bigbang; 1);
-// null_terminated_str_to_S
-.capi.bigbang2: LIBPATH_ (`bigbang2; 1);
 // ee
 .capi.catchy: LIBPATH_ (`catchy; 2);
 // jv
 .capi.concat_list: LIBPATH_ (`concat_list; 2);
+// b9
+.capi.conceal: LIBPATH_ (`conceal; 1);
 // append
 .capi.concat_list2: LIBPATH_ (`concat_list2; 2);
 // kb
@@ -110,11 +108,11 @@ LIBPATH_: `libc_api_examples 2:
 // dj
 .capi.days_to_date: LIBPATH_ (`days_to_date; 1);
 // q_ipc_decode
-.capi.decrypto: LIBPATH_ (`decrypto; 1);
+.capi.decrypto: LIBPATH_ (`decrypt; 1);
 // k
 .capi.dictionary_list_to_table: LIBPATH_ (`dictionary_list_to_table; 1);
 // q_ipc_encode
-.capi.encrypto: LIBPATH_ (`encrypto; 1);
+.capi.encrypto: LIBPATH_ (`encrypt; 1);
 // r0
 .capi.idle_man: LIBPATH_ (`idle_man; 1);
 // new_error
@@ -133,6 +131,10 @@ LIBPATH_: `libc_api_examples 2:
 .capi.parallel_sym_change: LIBPATH_ (`parallel_sym_change; 1);
 // r1
 .capi.pass_through_cave: LIBPATH_ (`pass_through_cave; 1);
+// str_to_S
+.capi.pingpong: LIBPATH_ (`pingpong; 1);
+// null_terminated_str_to_S
+.capi.pingpong2: LIBPATH_ (`pingpong2; 1);
 // get_bool
 .capi.print_bool: LIBPATH_ (`print_bool; 1);
 // get_byte
@@ -161,6 +163,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.print_symbol2: LIBPATH_ (`print_symbol2; 1);
 // register_callback
 .capi.plumber: LIBPATH_ (`plumber; 1);
+// d9
+.capi.reveal: LIBPATH_ (`reveal; 1);
 // dot
 .capi.rust_parse: LIBPATH_ (`rust_parse; 2);
 // increment_reference_count
@@ -184,7 +188,8 @@ LIBPATH_: `libc_api_examples 2:
 //%% Macros %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
 // str_to_S
-.test.ASSERT_EQ["str_to_S"; .capi.bigbang[]; `super_illusion]
+ping:{[int] `$string[int], "_pong!!"};
+.test.ASSERT_EQ["str_to_S"; .capi.pingpong[]; `$"77_pong!!"]
 
 //%% KUtility %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
@@ -293,23 +298,23 @@ guid: first 1?0Ng;
 
 // q_ipc_encode
 list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
-.test.ASSERT_EQ["q_ipc_encode"; .capi.encrypto[list]; bytes:-8!list]
+.test.ASSERT_EQ["q_ipc_encode"; .capi.encrypt[list]; bytes:-8!list]
 
 // q_ipc_encode - compress
 long_list: 1000#/: ("long"; `list);
-.test.ASSERT_EQ["q_ipc_encode - compress"; .capi.encrypto[long_list]; long_bytes:-8!long_list]
+.test.ASSERT_EQ["q_ipc_encode - compress"; .capi.encrypt[long_list]; long_bytes:-8!long_list]
 
 // q_ipc_decode
-.test.ASSERT_EQ["q_ipc_decode"; .capi.decrypto[bytes]; list]
+.test.ASSERT_EQ["q_ipc_decode"; .capi.decrypt[bytes]; list]
 
 // q_ipc_decode - decompress
-.test.ASSERT_EQ["q_ipc_decode - decompress"; .capi.decrypto[long_bytes]; long_list]
+.test.ASSERT_EQ["q_ipc_decode - decompress"; .capi.decrypt[long_bytes]; long_list]
 
 // q_ipc_decode - failure
-.test.ASSERT_ERROR["q_ipc_decode - failure"; .capi.decrypto; enlist `hello; "not bytes"]
+.test.ASSERT_ERROR["q_ipc_decode - failure"; .capi.decrypt; enlist `hello; "not bytes"]
 
 // q_ipc_decode - failure2
-.test.ASSERT_ERROR["q_ipc_decode - failure2"; .capi.decrypto; enlist 0x00aa12345678; "failed to decode"]
+.test.ASSERT_ERROR["q_ipc_decode - failure2"; .capi.decrypt; enlist 0x00aa12345678; "failed to decode"]
 
 //%% Constructors %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
@@ -403,6 +408,12 @@ long_list: 1000#/: ("long"; `list);
 // k
 .test.ASSERT_EQ[enlist "k"; .capi.dictionary_list_to_table[]; ([] a: 0 10 20i; b: 0 100 200i)]
 
+// b9
+.test.ASSERT_EQ["b9"; .capi.conceal["Look! HE has come!!"]; -8!"Look! HE has come!!"]
+
+// d9
+.test.ASSERT_EQ["d9"; .capi.reveal[-8!(`contact`from; "space"; 12)]; (`contact`from; "space"; 12)]
+
 //%% Reference count %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
 // r0
@@ -433,7 +444,7 @@ get_item2:{[man] "boiling pot, facing away from the north"}
 .test.ASSERT_EQ["S_to_str"; .capi.print_symbol[`rust]; (::)]
 
 // null_terminated_str_to_S
-.test.ASSERT_EQ["null_terminated_str_to_S"; .capi.bigbang2[]; `super_illusion]
+.test.ASSERT_EQ["null_terminated_str_to_S"; .capi.pingpong2[]; `$"77_pong!!"]
 
 // null_terminated_str_to_const_S
 .test.ASSERT_ERROR["str_to_const_S"; .capi.must_be_int; enlist 10000; "not an int"]
