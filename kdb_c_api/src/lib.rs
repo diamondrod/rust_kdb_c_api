@@ -8,6 +8,7 @@
 //! # Note
 //! - This library is for kdb+ version >= 3.0.
 //! - Meangless C macros are excluded but accessors of an underlying array like `kC`, `kJ`, `kK` etc. are provided in Rust way.
+//! - IPC interface is in development. Once the feature is added. This crate will be merged under different creat, say `rustkdb`.
 //! 
 //! ## Examples
 //! 
@@ -254,6 +255,8 @@ pub mod qtype{
   /// - `kK(x)[0]`: keys
   /// - `kK(x)[1]`: values
   pub const DICTIONARY:c_schar=99;
+  /// Type indicator of q foreign object.
+  pub const FOREIGN:c_schar=112;
   /// Type indicator of q sorted dictionary
   pub const SORTED_DICTIONARY:c_schar=127;
   /// Type indicator of q error
@@ -862,6 +865,11 @@ pub trait KUtility{
   /// Get a type of `K` object.
   fn get_type(&self) -> i8;
 
+  /// Set a type of `K` object.
+  /// # Example
+  /// See the example of [`load_as_q_function](../fn.load_as_q_function.html).
+  fn set_type(&self, qtype: i8);
+
   /// Serialize q object and return serialized q byte list object on success: otherwise null. 
   ///  Mode is either of:
   /// - -1: Serialize within the same process.
@@ -1109,6 +1117,11 @@ impl KUtility for K{
   #[inline]
   fn get_type(&self) -> i8{
     unsafe{(**self).qtype}
+  }
+
+  #[inline]
+  fn set_type(&self, qtype: i8){
+    unsafe{(**self).qtype=qtype};
   }
 
   #[inline]
@@ -2167,6 +2180,106 @@ pub fn pin_symbol() -> I{
 pub fn unpin_symbol() -> I{
   unsafe{
     native::setm(0)
+  }
+}
+
+/// Drop Rust object inside q. Passed as the first element of a foreign object.
+/// # Parameters
+/// - `obj`: List of (function to free the object; foreign object).
+/// # Example
+/// See the example of [`load_as_q_function`](#fn.load_as_q_function.html).
+pub extern "C" fn drop_q_object(obj: K) -> K{
+  let obj_slice=obj.as_mut_slice::<K>();
+  // Take ownership of `K` object from a raw pointer and drop at the end of this scope.
+  unsafe{Box::from_raw(obj_slice[1])};
+  // Fill the list with null.
+  obj_slice.copy_from_slice(&[KNULL, KNULL]);
+  obj
+}
+
+/// Load C function as a q function (`K` object).
+/// # Parameters
+/// - `func`: A function takes a C function that would take `n` `K` objects as arguments and returns a `K` object.
+/// - `n`: The number of arguments for the function.
+/// # Example
+/// ```no_run
+/// use kdb_c_api::*;
+/// 
+/// #[derive(Clone, Debug)]
+/// struct Planet{
+///   name: String,
+///   population: i64,
+///   water: bool
+/// }
+/// 
+/// impl Planet{
+///   /// Constructor of `Planet`.
+///   fn new(name: &str, population: i64, water: bool) -> Self{
+///     Planet{
+///       name: name.to_string(),
+///       population: population,
+///       water: water
+///     }
+///   }
+/// 
+///   /// Description of the planet.
+///   fn description(&self)->String{
+///     let mut desc=format!("The planet {} is a beautiful planet where {} people reside.", self.name, self.population);
+///     if self.water{
+///       desc+=" Furthermore water is flowing on the surface of it.";
+///     }
+///     desc
+///   }
+/// }
+/// 
+/// /// Example of `set_type`.
+/// #[no_mangle]
+/// pub extern "C" fn eden(_: K) -> K{
+///   let earth=Planet::new("earth", 7500_000_000, true);
+///   let foreign=new_simple_list(qtype::COMPOUND, 2);
+///   let foreign_slice=foreign.as_mut_slice::<K>();
+///   foreign_slice[0]=drop_q_object as K;
+///   foreign_slice[1]=Box::into_raw(Box::new(earth)) as K;
+///   // Set as foreign object.
+///   foreign.set_type(qtype::FOREIGN);
+///   foreign
+/// }
+/// 
+/// extern "C" fn invade(planet: K, action: K) -> K{
+///   let obj=planet.as_mut_slice::<K>()[1] as *const Planet;
+///   println!("{:?}", unsafe{obj.as_ref()}.unwrap());
+///   let mut desc=unsafe{obj.as_ref()}.unwrap().description();
+///   if action.get_bool().unwrap(){
+///     desc+=" You shall not curse what God blessed.";
+///   }
+///   else{
+///     desc+=" I perceived I could find favor of God by blessing them.";
+///   }
+///   new_string(&desc)
+/// }
+/// 
+/// /// Example of `load_as_q_function`.
+/// #[no_mangle]
+/// pub extern "C" fn probe(planet: K)->K{
+///   // Return monadic function
+///   unsafe{native::k(0, str_to_S!("{[func; planet] func[planet]}"), load_as_q_function(invade as *const V, 2), planet, KNULL)}
+/// }
+/// ```
+/// ```q
+/// q)eden: libc_api_example 2: (`eden; 1);
+/// q)earth: eden[]
+/// q)type earth
+/// 112h
+/// q)probe: libc_api_example 2: (`probe; 1);
+/// q)invade: probe[earth];
+/// q)\c 25 200
+/// q)invade 1b
+/// "The planet earth is a beautiful planet where 7500000000 people reside. Furthermore water is flowing on the surface of it. You shall not curse what God blessed."
+/// ```
+#[inline]
+pub fn load_as_q_function(func: *const V, n: J) -> K{
+  unsafe{
+    native::dl(func, n)
   }
 }
 

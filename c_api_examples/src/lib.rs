@@ -856,3 +856,63 @@ pub extern "C" fn plumber(_: K) -> K{
   unpin_symbol();
   KNULL
 }
+
+#[derive(Clone, Debug)]
+struct Planet{
+  name: String,
+  population: i64,
+  water: bool
+}
+
+impl Planet{
+  /// Constructor of `Planet`.
+  fn new(name: &str, population: i64, water: bool) -> Self{
+    Planet{
+      name: name.to_string(),
+      population: population,
+      water: water
+    }
+  }
+
+  /// Description of the planet.
+  fn description(&self)->String{
+    let mut desc=format!("The planet {} is a beautiful planet where {} people reside.", self.name, self.population);
+    if self.water{
+      desc+=" Furthermore water is flowing on the surface of it.";
+    }
+    desc
+  }
+}
+
+/// Example of `set_type`.
+#[no_mangle]
+pub extern "C" fn eden(_: K) -> K{
+  let earth=Planet::new("earth", 7500_000_000, true);
+  let foreign=new_simple_list(qtype::COMPOUND, 2);
+  let foreign_slice=foreign.as_mut_slice::<K>();
+  foreign_slice[0]=drop_q_object as K;
+  foreign_slice[1]=Box::into_raw(Box::new(earth)) as K;
+  // Set as foreign object.
+  foreign.set_type(qtype::FOREIGN);
+  foreign
+}
+
+extern "C" fn invade(planet: K, action: K) -> K{
+  let obj=planet.as_mut_slice::<K>()[1] as *const Planet;
+  println!("{:?}", unsafe{obj.as_ref()}.unwrap());
+  let mut desc=unsafe{obj.as_ref()}.unwrap().description();
+  if action.get_bool().unwrap(){
+    desc+=" You shall not curse what God blessed.";
+  }
+  else{
+    desc+=" I perceived I could find favor of God by blessing them.";
+  }
+  new_string(&desc)
+}
+
+/// Example of `load_as_q_function`.
+#[no_mangle]
+pub extern "C" fn probe(planet: K)->K{
+  // Return monadic function
+  unsafe{native::k(0, str_to_S!("{[func; planet] func[planet]}"), load_as_q_function(invade as *const V, 2), planet, KNULL)}
+}
