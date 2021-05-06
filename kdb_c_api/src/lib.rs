@@ -2,7 +2,7 @@
 //!  shared library for kdb+ in Rust.
 //! 
 //! In order to avoid writing too large `unsafe` block leading to poor optimization, most of native C API functions were provided
-//!  with a wrapper funtion with a bit of ergonomic safety and with intuitive implementation as a trait method. The only 
+//!  with a wrapper funtion with a bit of ergonomic safety and with intuitive implementation as a trait method. The only exceptions
 //!  are `knk` and `k` which are using elipsis (`...`) as its argument. These functions are provided under `native` namespace with the other C API functions.
 //! 
 //! # Note
@@ -2128,6 +2128,7 @@ pub fn destroy_socket_if(socket: I, condition: bool){
 /// }
 /// ```
 /// ```q
+/// q)shout:{[precious] -1 "What are the three largest elements?: ", .Q.s1 precious;};
 /// q)fall_into_pipe: `libc_api_example 2: (`plumber; 1);
 /// q)fall_into_pipe[]
 /// What are the three largest elements?: `belief`love`hope
