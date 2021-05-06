@@ -8,7 +8,7 @@
 //! # Note
 //! - This library is for kdb+ version >= 3.0.
 //! - Meangless C macros are excluded but accessors of an underlying array like `kC`, `kJ`, `kK` etc. are provided in Rust way.
-//! - IPC interface is in development. Once the feature is added. This crate will be merged under different creat, say `rustkdb`.
+//! - IPC interface is in development. Once the feature is added. This crate will be merged under different crate, say `rustkdb`.
 //! 
 //! ## Examples
 //! 
@@ -867,7 +867,7 @@ pub trait KUtility{
 
   /// Set a type of `K` object.
   /// # Example
-  /// See the example of [`load_as_q_function](../fn.load_as_q_function.html).
+  /// See the example of [`load_as_q_function](fn.load_as_q_function.html).
   fn set_type(&self, qtype: i8);
 
   /// Serialize q object and return serialized q byte list object on success: otherwise null. 
@@ -2187,7 +2187,7 @@ pub fn unpin_symbol() -> I{
 /// # Parameters
 /// - `obj`: List of (function to free the object; foreign object).
 /// # Example
-/// See the example of [`load_as_q_function`](#fn.load_as_q_function.html).
+/// See the example of [`load_as_q_function`](fn.load_as_q_function.html).
 pub extern "C" fn drop_q_object(obj: K) -> K{
   let obj_slice=obj.as_mut_slice::<K>();
   // Take ownership of `K` object from a raw pointer and drop at the end of this scope.
