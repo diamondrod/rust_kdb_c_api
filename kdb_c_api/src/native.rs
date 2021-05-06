@@ -951,6 +951,12 @@ extern "C"{
   /// ```
   pub fn setm(lock: I) -> I;
 
+  /// Load C function as q function (`K` object).
+  /// # Parameters
+  /// - `func`: A function takes a C function that would take `n` `K` objects as arguments and returns a `K` object.
+  /// - `n`: The number of arguments for the function.
+  pub fn dl(func: *const V, n: J) -> K;
+
   /// Convert ymd to the number of days from `2000.01.01`.
   /// # Example
   /// ```no_run
@@ -1031,13 +1037,6 @@ extern "C"{
   /// # Note
   /// This function seems not exist (`undefined symbol`).
   pub fn ver() -> I;
-
-  /// Function takes a C function that would take `n` `K` objects as arguments and returns a `K` object.
-  ///  Returns a q function.
-  /// # Note
-  /// As this library is purposed to build shared object, this function will not add a value. User can
-  ///  use `2:` instead.
-  pub fn dl(func: *const V, n: J) -> K;
   
   /// Variadic version of `knk`.
   fn vaknk(qtype: I, args: va_list) -> K;

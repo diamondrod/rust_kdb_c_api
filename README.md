@@ -220,7 +220,7 @@ FYI: type
 おいしい！
 おいしい！
 "Collect the clutter of apples!"
-test result: ok. 109 passed; 0 failed
+test result: ok. 112 passed; 0 failed
 What are the three largest elements?: `belief`love`hope
 q)
 
@@ -237,4 +237,4 @@ For details of C API itself, check the documents of KX website.
 
 ## Note
 
-This library is purposed to be used to build a sared library; therefore some unrelated functions are removed. For example, connection functions to kdb+ like `khpu` or q function generator like `dl` are not included.
+This library is purposed to be used to build a sared library; therefore some unrelated functions are removed. For example, connection functions to kdb+ like `khpu` are not included.

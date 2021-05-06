@@ -111,6 +111,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.decrypt: LIBPATH_ (`decrypt; 1);
 // k
 .capi.dictionary_list_to_table: LIBPATH_ (`dictionary_list_to_table; 1);
+// set_qtype
+.capi.eden: LIBPATH_ (`eden; 1);
 // q_ipc_encode
 .capi.encrypt: LIBPATH_ (`encrypt; 1);
 // r0
@@ -135,6 +137,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.pingpong: LIBPATH_ (`pingpong; 1);
 // null_terminated_str_to_S
 .capi.pingpong2: LIBPATH_ (`pingpong2; 1);
+// register_callback
+.capi.plumber: LIBPATH_ (`plumber; 1);
 // get_bool
 .capi.print_bool: LIBPATH_ (`print_bool; 1);
 // get_byte
@@ -161,8 +165,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.print_symbol: LIBPATH_ (`print_symbol; 1);
 // get_symbol
 .capi.print_symbol2: LIBPATH_ (`print_symbol2; 1);
-// register_callback
-.capi.plumber: LIBPATH_ (`plumber; 1);
+// load_as_q_function
+.capi.probe: LIBPATH_ (`probe; 1);
 // d9
 .capi.reveal: LIBPATH_ (`reveal; 1);
 // dot
@@ -295,6 +299,10 @@ guid: first 1?0Ng;
 
 // push_symbol
 .test.ASSERT_EQ["push_symbol"; .capi.create_symbol_list2[]; `Abraham`Isaac`Jacob`Joseph]
+
+// set_type
+planet: .capi.eden[];
+.test.ASSERT_EQ["set_qtype"; type planet; 112h]
 
 // q_ipc_encode
 list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
@@ -488,6 +496,11 @@ get_item2:{[man] "boiling pot, facing away from the north"}
 
 // key
 .test.ASSERT_EQ["enkey"; .capi.create_keyed_table2[]; 1!table]
+
+// load_as_q_function
+invade: .capi.probe[planet];
+.test.ASSERT_EQ["load_as_q_function"; invade 1b; "The planet earth is a beautiful planet where 7500000000 people reside. Furthermore water is flowing on the surface of it. You shall not curse what God blessed."]
+.test.ASSERT_EQ["load_as_q_function"; invade 0b; "The planet earth is a beautiful planet where 7500000000 people reside. Furthermore water is flowing on the surface of it. I perceived I could find favor of God by blessing them."]
 
 // decrement_reference_count
 .test.ASSERT_EQ["decrement_eference_count"; .capi.agriculture[]; (::)]
