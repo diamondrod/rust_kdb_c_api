@@ -234,6 +234,7 @@ pub extern "C" fn create_compound_list2(int: K) -> K{
   list
 }
 
+/// Example of `push_raw`.
 #[no_mangle]
 pub extern "C" fn create_simple_list2(_: K) -> K{
   let mut list=new_simple_list(qtype::DATE, 0);
@@ -252,6 +253,13 @@ pub extern "C" fn create_symbol_list2(_: K) -> K{
   list.push_symbol("Jacob").unwrap();
   list.push_symbol_n("Josephine", 6).unwrap();
   list
+}
+
+/// Example of `len`.
+#[no_mangle]
+  pub extern "C" fn numbers(obj: K) -> K{
+  let count=format!("{} people are in numbers", obj.len());
+  new_string(&count)
 }
 
 /// Example of `q_ipc_decode`.

@@ -127,6 +127,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.modify_long_list_a_bit: LIBPATH_ (`modify_long_list_a_bit; 1);
 // str_to_const_S
 .capi.must_be_int: LIBPATH_ (`must_be_int; 1);
+// len
+.capi.numbers: LIBPATH_ (`numbers; 1);
 // error_to_string
 .capi.no_panick: LIBPATH_ (`no_panick; 2);
 // setm
@@ -299,6 +301,17 @@ guid: first 1?0Ng;
 
 // push_symbol
 .test.ASSERT_EQ["push_symbol"; .capi.create_symbol_list2[]; `Abraham`Isaac`Jacob`Joseph]
+
+// len - general null
+.test.ASSERT_EQ["len general null"; .capi.numbers (::); "1 people are in numbers"]
+// len - atom
+.test.ASSERT_EQ["len atom"; .capi.numbers first 1?0Ng; "1 people are in numbers"]
+// len - list
+.test.ASSERT_EQ["len list"; .capi.numbers til 5; "5 people are in numbers"]
+// len - dictionary
+.test.ASSERT_EQ["len dictionary"; .capi.numbers `a`b!("many"; `split`asunder); "2 people are in numbers"]
+// len - table
+.test.ASSERT_EQ["len table"; .capi.numbers ([] x: til 10); "10 people are in numbers"]
 
 // set_type
 planet: .capi.eden[];

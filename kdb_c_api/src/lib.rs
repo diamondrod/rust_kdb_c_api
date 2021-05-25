@@ -250,7 +250,7 @@ pub mod qtype{
   pub const TIME:c_schar=19;
   /// Type indicator of q table.
   ///  `*(qstruct).k` is q dictionary.
-  pub const Table:c_schar=98;
+  pub const TABLE:c_schar=98;
   /// Type indicator of q dictionary.
   /// - `kK(x)[0]`: keys
   /// - `kK(x)[1]`: values
@@ -859,7 +859,26 @@ pub trait KUtility{
   /// Get a length of the list. More specifically, a value of `k0.value.list.n` for list types.
   ///  Otherwise 2 for table and 1 for atom and null.
   /// # Example
-  /// See the example of [`as_mut_slice`](trait.KUtility.html#tymethod.as_mut_slice).
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn numbers(obj: K) -> K{
+  ///   let count=format!("{} people are in numbers", obj.len());
+  ///   new_string(&count)
+  /// }
+  /// ```
+  /// ```q
+  /// q)census: `libc_api_examples 2: (`numbers; 1);
+  /// q)census[(::)]
+  /// "1 people are in numbers"
+  /// q)census[til 4]
+  /// "4 people are in numbers"
+  /// q)census[`a`b!("many"; `split`asunder)]
+  /// "2 people are in numbers"
+  /// q)census[([] id: til 1000)]
+  /// "1000 people are in numbers"
+  /// ```
   fn len(&self) -> i64;
 
   /// Get a type of `K` object.
@@ -1102,13 +1121,20 @@ impl KUtility for K{
         // Atom or (::)
         1
       }
-      else if (**self).qtype == qtype::Table{
-        // In case of table it has K must access `table` (K) and it is a dictionary
-        //  whose `value.list.n` is 2
-        2
+      else if (**self).qtype == qtype::TABLE{
+        // Table
+        // Access underlying table (dictionary structure) and retrieve values of the dictionary.
+        // The values (columns) is assured to be a list of lists as it is a table. so cast it to list of `K`.
+        // Size of the table is a length of the first column.
+        (*((**self).value.table).as_mut_slice::<K>()[1].as_mut_slice::<K>()[0]).value.list.n
+      }
+      else if (**self).qtype == qtype::DICTIONARY{
+        // Dictionary
+        // Access to keys of the dictionary and retrieve its length.
+        (*(*self).as_mut_slice::<K>()[0]).value.list.n
       }
       else{
-        // List or dictionary
+        // List
         (**self).value.list.n
       }
     }
@@ -1998,7 +2024,7 @@ pub fn unkey(keyed_table: K) -> K{
 #[inline]
 pub fn enkey(table: K, n: J) -> K{ 
   match unsafe{(*table).qtype}{
-    qtype::Table => unsafe{native::knt(n, table)},
+    qtype::TABLE => unsafe{native::knt(n, table)},
     _ => unsafe{native::krr(null_terminated_str_to_const_S("not a table"))}
   }
 }
