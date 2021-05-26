@@ -1923,7 +1923,7 @@ pub fn internalize(string: S) -> S{
 pub fn flip(dictionary: K) -> K{
   match unsafe{(*dictionary).qtype}{
     qtype::DICTIONARY => unsafe{native::xT(dictionary)},
-    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a dictionary"))}
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a dictionary\0"))}
   }
 }
 
@@ -1975,7 +1975,7 @@ pub fn flip(dictionary: K) -> K{
 pub fn unkey(keyed_table: K) -> K{
   match unsafe{(*keyed_table).qtype}{
     qtype::DICTIONARY => unsafe{native::ktd(keyed_table)},
-    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a keyed table"))}
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a keyed table\0"))}
   }
 }
 
@@ -2025,7 +2025,7 @@ pub fn unkey(keyed_table: K) -> K{
 pub fn enkey(table: K, n: J) -> K{ 
   match unsafe{(*table).qtype}{
     qtype::TABLE => unsafe{native::knt(n, table)},
-    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a table"))}
+    _ => unsafe{native::krr(null_terminated_str_to_const_S("not a table\0"))}
   }
 }
 
