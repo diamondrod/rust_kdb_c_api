@@ -736,8 +736,8 @@ pub trait KUtility{
   /// # Note
   /// This method is provided because the ony way to examine the value of table type is to access the underlying dictionary (flipped table).
   ///  Also when some serialization is necessary for a table, you can reuse a serializer for a dictionary if it is already provided. Actually
-  ///  q serialize a table object with `-8!` (q function) or `b9` (C code), it just serialize the underlying dictionary with additional marker
-  ///  indicating a table type.
+  ///  when q serialize a table object with `-8!` (q function) or `b9` (C code), it just serializes the underlying dictionary with an additional
+  ///  marker indicating a table type.
   fn get_dictionary(&self) -> Result<K, &'static str>;
 
   /// Append a q list object to a q list.
