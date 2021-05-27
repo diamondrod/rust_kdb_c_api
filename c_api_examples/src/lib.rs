@@ -212,6 +212,15 @@ pub extern "C" fn print_string2(string: K) -> K{
   }
 }
 
+/// Example of `get_dictionary`.
+#[no_mangle]
+pub extern "C" fn hidden_key(table: K) -> K{
+  match table.get_dictionary(){
+    Ok(dictionary) => dictionary.as_mut_slice::<K>()[0].q_ipc_encode(3).unwrap(),
+    Err(error) => new_error(error)
+  }
+}
+
 /// Example of `append`.
 #[no_mangle]
 pub extern "C" fn concat_list2(mut list1: K, list2: K) -> K{

@@ -115,6 +115,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.eden: LIBPATH_ (`eden; 1);
 // q_ipc_encode
 .capi.encrypt: LIBPATH_ (`encrypt; 1);
+// get_dictionary
+.capi.hidden_key: LIBPATH_ (`hidden_key; 1);
 // r0
 .capi.idle_man: LIBPATH_ (`idle_man; 1);
 // new_error
@@ -285,6 +287,11 @@ guid: first 1?0Ng;
 .test.ASSERT_EQ["get_string"; .capi.print_string2["grasshopper"]; (::)]
 // get_string - error
 .test.ASSERT_ERROR["get_string - failure"; .capi.print_string2; enlist (1 2; `a`b); "not a string"]
+
+// get_dictionary
+.test.ASSERT_EQ["get_string"; .capi.hidden_key[([] t: `timestamp$.z.p+1e9*til 9; chr:"ljppkgfgs"; is: 7 8 12 14 21 316 400 1000 6000i)]; -8!`t`chr`is]
+// get_string - error
+.test.ASSERT_ERROR["get_dictionary - failure"; .capi.hidden_key; enlist 777; "not a table"]
 
 // append
 .test.ASSERT_EQ["append - compound"; .capi.concat_list2[(::; `metals; `fire); ("clay"; 316)]; (::; `metals; `fire; "clay"; 316)]

@@ -471,7 +471,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_boole: LIBPATH_ (`print_bool; 1);
+  /// q)print_boole: `libc_api_examples 2: (`print_bool; 1);
   /// q)print_bool[1b]
   /// bool: true
   /// ```
@@ -495,7 +495,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_guid: LIBPATH_ (`print_guid; 1);
+  /// q)print_guid: `libc_api_examples 2: (`print_guid; 1);
   /// q)guid: first 1?0Ng;
   /// q)print_guid[guid]
   /// GUID: 8c6b-8b-64-68-156084
@@ -519,7 +519,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_byte: LIBPATH_ (`print_byte; 1);
+  /// q)print_byte: `libc_api_examples 2: (`print_byte; 1);
   /// q)print_byte[0xc4]
   /// byte: 0xc4
   /// ```
@@ -542,7 +542,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_short: LIBPATH_ (`print_short; 1);
+  /// q)print_short: `libc_api_examples 2: (`print_short; 1);
   /// q)print_short[10h]
   /// short: 10
   /// ```
@@ -565,7 +565,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_int: LIBPATH_ (`print_int; 1);
+  /// q)print_int: `libc_api_examples 2: (`print_int; 1);
   /// q)print_int[03:57:20]
   /// int: 14240
   /// ```
@@ -588,7 +588,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_long: LIBPATH_ (`print_long; 1);
+  /// q)print_long: `libc_api_examples 2: (`print_long; 1);
   /// q)print_long[2000.01.01D12:00:00.123456789]
   /// long: 43200123456789
   /// ```
@@ -611,7 +611,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_real: LIBPATH_ (`print_real; 1);
+  /// q)print_real: `libc_api_examples 2: (`print_real; 1);
   /// q)print_real[193810.32e]
   /// real: 193810.31
   /// ```
@@ -634,7 +634,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_float: LIBPATH_ (`print_float; 1);
+  /// q)print_float: `libc_api_examples 2: (`print_float; 1);
   /// q)print_float[2002.01.12T10:03:45.332]
   /// float: 742.41927468
   /// ```
@@ -657,7 +657,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_char: LIBPATH_ (`print_char; 1);
+  /// q)print_char: `libc_api_examples 2: (`print_char; 1);
   /// q)print_char["k"]
   /// char: "k"
   /// ```
@@ -680,7 +680,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_symbol2: LIBPATH_ (`print_symbol2; 1);
+  /// q)print_symbol2: `libc_api_examples 2: (`print_symbol2; 1);
   /// q)print_symbol2[`locust]
   /// symbol: `locust
   /// ```
@@ -703,7 +703,7 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_string: LIBPATH_ (`print_string; 1);
+  /// q)print_string: `libc_api_examples 2: (`print_string; 1);
   /// q)print_string["gnat"]
   /// string: "gnat"
   /// ```
@@ -726,13 +726,30 @@ pub trait KUtility{
   /// }
   /// ```
   /// ```q
-  /// q)print_string: LIBPATH_ (`print_string; 1);
+  /// q)print_string: `libc_api_examples 2: (`print_string; 1);
   /// q)print_string["grasshopper"]
   /// string: "grasshopper"
   /// ```
   fn get_string(&self) -> Result<String, &'static str>;
 
   /// Get a flipped underlying q table as `K` (dictionary).
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn hidden_key(table: K) -> K{
+  ///   match table.get_dictionary(){
+  ///     Ok(dictionary) => dictionary.as_mut_slice::<K>()[0].q_ipc_encode(3).unwrap(),
+  ///     Err(error) => new_error(error)
+  ///   }
+  /// }
+  /// ```
+  /// ```q
+  /// q)perceive_the_man: `libc_api_examples 2: (`hidden_key; 1);
+  /// q)perceive_the_man ([] t: `timestamp$.z.p+1e9*til 9; chr:"ljppkgfgs"; is: 7 8 12 14 21 316 400 1000 6000i)
+  /// 0x01000000170000000b0003000000740063687200697300
+  /// ```
   /// # Note
   /// This method is provided because the ony way to examine the value of table type is to access the underlying dictionary (flipped table).
   ///  Also when some serialization is necessary for a table, you can reuse a serializer for a dictionary if it is already provided. Actually

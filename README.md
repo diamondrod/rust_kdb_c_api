@@ -220,7 +220,7 @@ FYI: type
 おいしい！
 おいしい！
 "Collect the clutter of apples!"
-test result: ok. 117 passed; 0 failed
+test result: ok. 119 passed; 0 failed
 What are the three largest elements?: `belief`love`hope
 q)
 
