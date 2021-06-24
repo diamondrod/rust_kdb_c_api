@@ -1,3 +1,5 @@
+**!!Notice!!** This crate was migrated to [kdbplus](https://github.com/diamondrod/kdbplus) which has IPC module as well.
+
 # Rust Wrapper of kdb+ C API
 
 Programming language q (kdb+ is a database written in q) is providing only C API but sometimes an external library provides Rust interface but not C/C++ interface. From the fame of its performance, Rust still should be feasible to build a shared library for kdb+. This library is provided to address such a natural demand (desire, if you will). Since there is no way for everyone but creating a wrapper like this to write a shared library for kdb+, it probably make sense for someone to provide the wrapper, and it was done here.
@@ -220,7 +222,7 @@ FYI: type
 おいしい！
 おいしい！
 "Collect the clutter of apples!"
-test result: ok. 119 passed; 0 failed
+test result: ok. 122 passed; 0 failed
 What are the three largest elements?: `belief`love`hope
 q)
 

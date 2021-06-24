@@ -264,6 +264,20 @@ pub extern "C" fn create_symbol_list2(_: K) -> K{
   list
 }
 
+/// Example of `get_attribute`.
+#[no_mangle]
+pub extern "C" fn murmur(list: K) -> K{
+  match list.get_attribute(){
+    qattribute::SORTED => {
+      new_string("Clean")
+    },
+    qattribute::UNIQUE => {
+      new_symbol("Alone")
+    },
+    _ => KNULL
+  }
+}
+
 /// Example of `len`.
 #[no_mangle]
   pub extern "C" fn numbers(obj: K) -> K{

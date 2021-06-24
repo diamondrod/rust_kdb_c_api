@@ -127,6 +127,8 @@ LIBPATH_: `libc_api_examples 2:
 .capi.keyed_to_simple_table2: LIBPATH_ (`keyed_to_simple_table2; 1);
 // as_mut_slice
 .capi.modify_long_list_a_bit: LIBPATH_ (`modify_long_list_a_bit; 1);
+// get_attribute
+.capi.murmur: LIBPATH_ (`murmur; 1);
 // str_to_const_S
 .capi.must_be_int: LIBPATH_ (`must_be_int; 1);
 // len
@@ -290,8 +292,15 @@ guid: first 1?0Ng;
 
 // get_dictionary
 .test.ASSERT_EQ["get_string"; .capi.hidden_key[([] t: `timestamp$.z.p+1e9*til 9; chr:"ljppkgfgs"; is: 7 8 12 14 21 316 400 1000 6000i)]; -8!`t`chr`is]
-// get_string - error
+// get_dictionary - error
 .test.ASSERT_ERROR["get_dictionary - failure"; .capi.hidden_key; enlist 777; "not a table"]
+
+// get_attribute - sorted
+.test.ASSERT_EQ["get_attribute - sorted"; .capi.murmur[`s#1 2 3]; "Clean"]
+// get_attribute - unique
+.test.ASSERT_EQ["get_attribute - unique"; .capi.murmur[`u#1 2 3]; `Alone]
+// get_attribute - parted
+.test.ASSERT_EQ["get_attribute - parted"; .capi.murmur[`p#1 2 3]; (::)]
 
 // append
 .test.ASSERT_EQ["append - compound"; .capi.concat_list2[(::; `metals; `fire); ("clay"; 316)]; (::; `metals; `fire; "clay"; 316)]

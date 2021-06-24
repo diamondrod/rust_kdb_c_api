@@ -1,3 +1,5 @@
+//! **!!Notice!!** This crate was migrated to [kdbplus](https://crates.io/crates/kdbplus) which has IPC module as well.
+//! 
 //! Rust crate mirroring the C API header file (`k.h`) for kdb+. The expected usage is to build a
 //!  shared library for kdb+ in Rust.
 //! 
@@ -8,7 +10,6 @@
 //! # Note
 //! - This library is for kdb+ version >= 3.0.
 //! - Meangless C macros are excluded but accessors of an underlying array like `kC`, `kJ`, `kK` etc. are provided in Rust way.
-//! - IPC interface is in development. Once the feature is added. This crate will be merged under different crate, say `rustkdb`.
 //! 
 //! ## Examples
 //! 
@@ -263,6 +264,25 @@ pub mod qtype{
   pub const ERROR:c_schar=-128;
   /// Type indicator of q general null
   pub const NULL:c_schar=101;
+
+}
+
+pub mod qattribute{
+  //! This module provides a list of q attributes. The motivation to contain them in a module is to 
+  //!  tie them up as related items rather than scattered values. Hence user should use these
+  //!  indicators with `qattribute::` prefix, e.g., `qattribute::UNIQUE`.
+  
+  use std::os::raw::c_char;
+  /// Indicates no attribute is appended on the q object. 
+  pub const NONE: c_char=0;
+  /// Sorted attribute, meaning that the q list is sorted in ascending order.
+  pub const SORTED: c_char=1;
+  /// Unique attribute, meaning that each element in the q list has a unique value within the list.
+  pub const UNIQUE: c_char=2;
+  /// Parted attribute, meaning that all the elements with the same value in the q object appear in a chunk.
+  pub const PARTED: c_char=3;
+  /// Grouped attribute, meaning that the elements of the q list are grouped with their indices by values implicitly.
+  pub const GROUPED: c_char=4;
 
 }
 
@@ -757,6 +777,29 @@ pub trait KUtility{
   ///  marker indicating a table type.
   fn get_dictionary(&self) -> Result<K, &'static str>;
 
+  /// Get an attribute of a q object.
+  /// # Example
+  /// ```no_run
+  /// use kdb_c_api::*;
+  /// 
+  /// #[no_mangle]
+  /// pub extern "C" fn murmur(list: K) -> K{
+  ///   match list.get_attribute(){
+  ///     qattribute::SORTED => {
+  ///       new_string("Clean")
+  ///     },
+  ///     qattribute::UNIQUE => {
+  ///       new_symbol("Alone")
+  ///     },
+  ///     _ => KNULL
+  ///   }
+  /// }
+  /// ```
+  fn get_attribute(&self) -> C;
+
+  /// Get a reference count of a q object.
+  fn get_refcount(&self) -> I;
+
   /// Append a q list object to a q list.
   ///  Returns a pointer to the (potentially reallocated) `K` object.
   /// ```no_run
@@ -1099,6 +1142,16 @@ impl KUtility for K{
       },
       _ => Err("not a table\0")
     }
+  }
+
+  #[inline]
+  fn get_attribute(&self) -> i8{
+    unsafe{(**self).attribute}
+  }
+
+  #[inline]
+  fn get_refcount(&self) -> i32{
+    unsafe{(**self).refcount}
   }
 
   #[inline]
